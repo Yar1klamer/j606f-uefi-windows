@@ -14,5 +14,9 @@ goto end
 :idle
 if not exist C:\j606f\devmode goto end
 echo [agent] devmode, no run.cmd: restart in 300 s %date% %time% >> %OUT%\agent.log
+rem the menu default goes back to pmOS first, otherwise a Windows default loops through this restart
+mountvol S: /s
+< nul set /p "=1" > S:\EFI\Boot\j606fboot.def
+mountvol S: /d
 shutdown /r /t 300 /c "j606f devmode: nothing to run, back to pmOS in 5 min"
 :end

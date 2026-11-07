@@ -1,5 +1,7 @@
 # Windows на J606F: как ставить (2026-11-04, после тестов U1–U4)
 
+> **Выполнено (вариант B, 04.11):** Windows поставлена из pmOS (wimlib + WinPE + bcdboot). Текущее состояние — STATE.md.
+
 ## Что уже доказано
 - UEFI j606f (Mu-Silicium, KamortaPkg) грузится через `fastboot boot`: SEC → DXE → BDS, все драйверы Qualcomm из нашего xbl_a стартуют,
   UFS (Micron MT128GASAO4U21) виден, таблицы ACPI ставятся (AcpiPlatform), SimpleFb на 0x5C000000. Лог — raw/uefi_logs/u3_d2.log.

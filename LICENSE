@@ -11,7 +11,11 @@ This repository contains code under several licenses.
    The Himax HX83102E bring-up sequences may derive from the GPL-2.0 Himax touch driver (Lenovo kernel / mainline port).
    Until the owner decides, these files must not be published under a license of their own. Do not treat them as MIT.
 
-3. Everything else (acpi/, the rest of windrv/, scripts/, docs/) — MIT License
+3. windrv/j606fdsp/ — our own code (j606f_bl.cxx, patch_kmdod.sh, build_dsp.sh): proposed MIT, owner to confirm.
+   The Microsoft KMDOD sample (MS-PL) is NOT included: patch_kmdod.sh inserts short fragments into the sample's files
+   on the user's machine. The sample and the WDK are downloaded by the user from Microsoft.
+
+4. Everything else (acpi/, the rest of windrv/, scripts/, docs/) — MIT License
 
 MIT License
 

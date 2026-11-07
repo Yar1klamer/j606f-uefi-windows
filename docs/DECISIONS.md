@@ -23,3 +23,28 @@
   нужен только перед действием, затирающим userdata, и только если в pmOS с тех пор появилось новое ценное. После отката из него вернуть руками wlanmdsp.mbn
   (/lib/firmware/updates/qcom/sm6115/LENOVO/J606F/, стоковый из modem_a) и ~/.config/powerdevilrc [AC][SuspendAndShutdown] AutoSuspendAction=0.
   SIGSEGV python3/powerdevil на pmOS — известно с отката 03.11, бэкап их не лечит; python3 на планшете не использовать.
+
+## 2026-11-07 Кнопки в Windows: HID-минидрайвер с опросом SPMI на root-устройстве
+- Выбрано: свой WDM HID-минидрайвер hidbuttons.sys (как hidtouch), поток опрашивает PM6125 по SPMI каждые 20 мс (PON_RT_STS 0x0810, GPIO5 RT_STS 0xC410),
+  отчёты Consumer Control (громкость) + System Control (Power). Устройство — ROOT\J606FBTN\0000 (ключ Enum\Root, Service j606fbtn), появляется при загрузке.
+- Не ACPI0011/PNP0C40 (Windows Button Array): им нужен GpioInt от драйвера GPIO-контроллера PMIC (qcpmicgpio/PEP), которого нет; прерывания PMIC в Windows не подняты.
+- Не новое устройство в SSDT: FVMAIN UEFI заполнен на 99 % (56 байт), 0x522000 не грузится.
+- В PMIC только чтение: аппаратный сброс по удержанию Питания (10–15 с), S2/PS_HOLD не затронуты.
+
+## 2026-11-07 Меню выбора ОС: UEFI-приложение в ESP, а не в FV
+- J606fBoot (efiapp/J606fBoot, компонент j606f.dsc) кладётся в ESP как \EFI\Boot\bootaa64.efi; прежний bootaa64 (bootmgfw) — рядом как bootaa64.windows.efi.
+  Причина: FVMAIN заполнен на 99 % и 0x522000 не грузится; откат меню — одно копирование файла из pmOS, разделы загрузчиков не трогаются.
+- pmOS из меню грузится как ядро из boot_b через EFI stub (свой gunzip — Inflate.c, без чужого кода), Windows — через bootmgfw. Последний выбор — в j606fboot.def на ESP.
+- Слот a (UEFI v7) активен постоянно, слот b (pmOS через ABL) — запасной путь (`fastboot set_active b`).
+
+## 2026-11-07 Карта памяти v7: резервировать области reserved-memory pmOS
+- В MemoryMapLib j606f добавлены Reserv-записи 0x53F00000 +0x2300000 (adsp/zap GPU) и 0x89B01000 +0x200000. Без них RamManagerDxe отдавал дыры как
+  Conventional, ядро pmOS не могло зарезервировать память для adsp/GPU (чёрный экран). Windows от этого не страдает (проверено: рабочий стол на v7).
+
+## 2026-11-07 Дисплей Windows: свой display-only драйвер (вариант A) — решение владельца
+- Владелец выбрал «A: драйвер + ползунок»: свой KMDOD (пример Microsoft, MS-PL) + DXGK_BRIGHTNESS_INTERFACE, яркость — DCS 0x51 по DSI0 (путь доказан dsiprobe).
+  Не qcdx (вариант C): нет драйвера для A610, нужны PEP/SMMU/SCM Qualcomm (notes/windows_gpu.md).
+- WDK/SDK/пример KMDOD скачаны с разрешения владельца, держатся только на хосте сборки и не публикуются; публикуется только свой код (j606f_bl.cxx, patch_kmdod.sh, build_dsp.sh).
+- Подключение без INF: Service устройства ROOT\BasicDisplay\0000 = j606fdsp. Тест — в две загрузки: первая ставит Service, вторая первым делом возвращает
+  BasicDisplay (любой сбой/перезагрузка возвращает рабочий Basic Display). Подмена ImagePath самой службы BasicDisplay — только с решением владельца.
+- Если POST-дисплей пустой — кадровый буфер UEFI (0x5c000000, 1200×2000, pitch 4800) вручную: SimpleFbDxe и pmOS используют тот же.

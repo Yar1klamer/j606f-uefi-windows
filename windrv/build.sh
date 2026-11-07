@@ -2,13 +2,13 @@
 # Build and test-sign J606F Windows ARM64 kernel drivers on the Linux build host.
 # Link flags as an inbox ARM64 driver (null.sys): without NOT_PAGED sections + OS/subsystem 10.0 + no TSAWARE the kernel refuses the
 # image with C0000018 STATUS_CONFLICTING_ADDRESSES (tests run_04/run_05, 2026-11-04).
-#   sh build.sh <driver dir>     → <dir>/out/<name>.sys (signed with the test certificate in ~/uefi-winarm/windrv-cert)
+#   sh build.sh <driver dir>     → <dir>/out/<name>.sys (signed with the test certificate in ~/j606f-build/windrv-cert)
 set -eu
-T=${LLVM_MINGW:-$HOME/uefi-winarm/tools/llvm-mingw}
+T=${LLVM_MINGW:-~/j606f-build/tools/llvm-mingw}
 HERE=$(cd "$(dirname "$0")" && pwd)
 D=$(cd "$1" && pwd)
 NAME=$(basename "$D")
-CERT=$HOME/uefi-winarm/windrv-cert
+CERT=~/j606f-build/windrv-cert
 mkdir -p "$HERE/lib/out" "$D/out"
 for def in "$HERE"/lib/*.def; do
 	"$T/bin/llvm-dlltool" -m arm64 -d "$def" -l "$HERE/lib/out/lib$(basename "$def" .def).a"

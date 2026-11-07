@@ -29,7 +29,7 @@
   FD base 0x5FC00000 size 0x300000. ABL J606F appended DTB при header v0/v1 уже принимал (pmos-j606f LOG 28.10, тест 2).
 
 ## 3. Шаги порта (оценка — рабочее время, при доступном хосте)
-1. **Хост сборки** (Ubuntu, `~/uefi-winarm/` отдельно от ~/j606f): `git clone --recursive Mu-Silicium` (~5 ГБ!), `./setup_env.sh -p apt` (sudo apt:
+1. **Хост сборки** (Ubuntu, `~/j606f-build/` отдельно от ~/j606f): `git clone --recursive Mu-Silicium` (~5 ГБ!), `./setup_env.sh -p apt` (sudo apt:
    clang/llvm, python3-venv, mono?), `pip -r pip-requirements.txt` в venv. Сначала собрать **lime** без изменений — проверка окружения. 1–2 ч + скачивание.
    ⚠ 04.11 хост по ssh недоступен (timeout, как и в pmos-j606f LOG 04.11) — нужен владелец. Запасной вариант — сборка на самом планшете под pmOS
    (aarch64, Silicium официально не поддерживает) или Linux-VM.

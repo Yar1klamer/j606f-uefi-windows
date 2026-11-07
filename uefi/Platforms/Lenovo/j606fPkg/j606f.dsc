@@ -72,6 +72,7 @@
   ConfigurationMapLib|j606fPkg/Library/ConfigurationMapLib/ConfigurationMapLib.inf
 
 [Components]
+  j606fPkg/Application/J606fBoot/J606fBoot.inf
   #
   # ACPI Tables
   #

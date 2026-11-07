@@ -1,0 +1,44 @@
+## @file
+#  J606F boot menu: Windows (bootmgfw.efi) or postmarketOS (Android boot image of boot_b through the Linux EFI stub).
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+[Defines]
+  INF_VERSION    = 0x00010005
+  BASE_NAME      = J606fBoot
+  FILE_GUID      = 6c6a2d0e-58b1-4c1e-9b2f-5f0a3b9e606f
+  MODULE_TYPE    = UEFI_APPLICATION
+  VERSION_STRING = 1.0
+  ENTRY_POINT    = J606fBootMain
+
+[Sources]
+  J606fBoot.c
+  Inflate.c
+  Inflate.h
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiLib
+  UefiBootServicesTableLib
+  MemoryAllocationLib
+  BaseMemoryLib
+  BaseLib
+  DevicePathLib
+  PrintLib
+
+[Protocols]
+  gEfiLoadedImageProtocolGuid
+  gEfiBlockIoProtocolGuid
+  gEfiPartitionInfoProtocolGuid
+  gEfiLoadFile2ProtocolGuid
+  gEfiDevicePathProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiGraphicsOutputProtocolGuid
+  gEfiHiiFontProtocolGuid
+
+[Guids]
+  gFdtTableGuid
+  gLinuxEfiInitrdMediaGuid

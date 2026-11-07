@@ -4,7 +4,7 @@
 Итог: pmOS ужата до 24 ГиБ, за ней ESP 512 МиБ и NTFS ~78 ГиБ под Windows. **Это меняет разметку LUN0 — сначала бэкап.**
 
 Что нужно: собранный UEFI ([BUILD_UEFI.md](BUILD_UEFI.md)), образ **Windows 11 22H2/23H2 ARM64** (свой ISO или собранный через UUP dump;
-24H2+ на SD662 не стартует), Linux-машина рядом (для `wimlib`/`hivex`), USB-сеть с pmOS (`ssh user@172.16.42.1`).
+24H2+ на SD662 не стартует), Linux-машина рядом (для `wimlib`/`hivex`), USB-сеть с pmOS (`ssh <tablet-user>@<tablet-ip>`).
 
 ## 0. Бэкап
 - Вся userdata: `fastboot`-совместимый sparse-образ (как в репозитории pmOS, `scripts/backup_userdata.sh`) — откат `fastboot flash userdata …`.
@@ -13,7 +13,7 @@
 ## 1. Ужать pmOS и разметить место
 `scripts/shrink_pmos_for_windows.sh` — для 128-ГБ модели (все размеры и секторы в шапке скрипта; для другой модели пересчитайте).
 PARTUUID берутся с вашего планшета и передаются через переменные `ROOT_PARTUUID`, `UD_PARTUUID`.
-1. Загрузить pmOS с `pmos.debug-shell` в cmdline (оболочка initramfs до монтирования root; `telnet 172.16.42.1 23`), только через `fastboot boot`.
+1. Загрузить pmOS с `pmos.debug-shell` в cmdline (оболочка initramfs до монтирования root; `telnet <tablet-ip> 23`), только через `fastboot boot`.
 2. `sh shrink_pmos_for_windows.sh` — проверки и план без записи; `--write` — e2fsck, resize2fs, вложенная GPT, затем внешняя:
    `userdata` 24 ГиБ (тот же type/PARTUUID/имя), `esp` 512 МиБ (EF00), `win` — остаток (0700).
 3. Форматирование: `mkfs.vfat -F 32 -S 4096 -n ESP /dev/sda16`, `mkntfs -Q -s 4096 -L Windows /dev/sda17`
@@ -25,7 +25,7 @@ PARTUUID берутся с вашего планшета и передаются
 На Linux-машине экспортировать нужный индекс в pipable WIM и подать его потоком на планшет (на планшете мало места):
 ```sh
 wimlib-imagex export install.wim 1 install_pipable.wim --pipable
-cat install_pipable.wim | ssh user@172.16.42.1 'sudo wimlib-imagex apply - 1 /dev/sda17'
+cat install_pipable.wim | ssh <tablet-user>@<tablet-ip> 'sudo wimlib-imagex apply - 1 /dev/sda17'
 ```
 Предупреждение «Ignoring extended attributes» в режиме NTFS-3G — ожидаемо, Windows с этим грузится.
 `scripts/winpe/unattend.xml` (локальная учётка `User` без пароля, пропуск OOBE, `SanPolicy=4`) → `W:\Windows\Panther\unattend.xml`.

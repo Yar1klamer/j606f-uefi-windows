@@ -1,10 +1,10 @@
 #!/bin/sh
 # Loader experiment: hellov.c built with different link options + ntload.exe. Run on the build host: sh build_ldtest.sh
 set -eu
-T=${LLVM_MINGW:-$HOME/uefi-winarm/tools/llvm-mingw}
+T=${LLVM_MINGW:-~/j606f-build/tools/llvm-mingw}
 HERE=$(cd "$(dirname "$0")" && pwd)
 W=$(cd "$HERE/.." && pwd)
-CERT=$HOME/uefi-winarm/windrv-cert
+CERT=~/j606f-build/windrv-cert
 O=$HERE/out
 mkdir -p "$O" "$W/lib/out"
 "$T/bin/llvm-dlltool" -m arm64 -d "$W/lib/ntoskrnl.def" -l "$W/lib/out/libntoskrnl.a"

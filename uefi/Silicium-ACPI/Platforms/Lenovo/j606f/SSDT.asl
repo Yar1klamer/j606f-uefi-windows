@@ -1,4 +1,4 @@
-DefinitionBlock ("SSDT.aml", "SSDT", 2, "LENOVO", "J606F  ", 5)
+DefinitionBlock ("SSDT.aml", "SSDT", 2, "LENOVO", "J606F  ", 6)
 {
     External (\_SB.UFS0, DeviceObj)
     External (\_SB.SDC1, DeviceObj)
@@ -146,4 +146,15 @@ DefinitionBlock ("SSDT.aml", "SSDT", 2, "LENOVO", "J606F  ", 5)
         }
     }
 
+
+    // Himax HX83102E touch (QUP0 SE2 SPI, IRQ gpio86, reset gpio54): no resources here, the J606F HID minidriver
+    // (windrv/hidtouch) programs SE2/TLMM itself. Only gives PnP a device to bind the driver to.
+    Scope (\_SB)
+    {
+        Device (TSC0)
+        {
+            Name (_HID, "JHMX0001")
+            Name (_UID, Zero)
+        }
+    }
 }

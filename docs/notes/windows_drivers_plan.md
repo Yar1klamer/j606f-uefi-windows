@@ -54,9 +54,9 @@ ACPI_BIOS_ERROR → во всех циклах тайм-ауты, сначала
 - Кнопки громкости/питания (PMIC PON + TLMM) — через ACPI/GPIO, после драйвера GPIO.
 
 ## 5. Инфраструктура (сделана 04.11, без планшета)
-- Сборка драйверов Windows ARM64 на хосте: llvm-mingw 20261020 (~/uefi-winarm/tools/llvm-mingw), свой заголовок windrv/include/j606f_nt.h
+- Сборка драйверов Windows ARM64 на хосте: llvm-mingw 20261020 (~/j606f-build/tools/llvm-mingw), свой заголовок windrv/include/j606f_nt.h
   (DDK mingw не поддерживает ARM64), импорт ntoskrnl из windrv/lib/ntoskrnl.def (llvm-dlltool), тестовая подпись osslsigncode
-  (сертификат ~/uefi-winarm/windrv-cert, приватный ключ только на хосте). `sh windrv/build.sh windrv/hello` → hello.sys (пробный драйвер).
+  (сертификат ~/j606f-build/windrv-cert, приватный ключ только на хосте). `sh windrv/build.sh windrv/hello` → hello.sys (пробный драйвер).
 - Агент Windows (windrv/agent): служба `j606fagent` (LocalSystem, авто) → C:\j606f\agent.cmd → один раз выполняет C:\j606f\run.cmd,
   лог в C:\j606f\out. Ставится офлайн из pmOS: файлы через ntfs-3g + j606fagent.reg в SYSTEM-хайв (hivexregedit на хосте).
   Первый сценарий run_01_inventory.cmd: сертификат → загрузка hello.sys → опись устройств/батареи/видео/CPU, ошибки журнала.
@@ -98,3 +98,17 @@ ACPI_BIOS_ERROR → во всех циклах тайм-ауты, сначала
 - Ограничения: % по напряжению (без учёта IR-падения: под нагрузкой ниже, на зарядке выше; на зарядке не больше 99 %, пока не taper/terminate у 4,35 В);
   уведомлений (Notify 0x80) нет — Windows опрашивает сама; число циклов/износ — неизвестны (это только mm8013).
 - Дальше: поправка на IR (OCV ≈ V + I·R, R из профиля pc-temp-z/ESR), затем дисплей (яркость), частоты CPU, USB host.
+
+## 10. Статус 2026-11-07, 22:10 (итог по драйверам Windows)
+| Устройство | Как сделано | Состояние |
+|---|---|---|
+| Батарея/адаптер | AML в SSDT (BAT0 PNP0C0A + ADP0), PMI632 по SPMI, inbox cmbatt | ✅ v5d/v6/v7 |
+| Зарядка | UEFI `EnableChargerWdog = 0` (v4+) | ✅ |
+| Тач HX83102P | windrv/hidtouch → hidtouch.sys (ed2349a8…, служба j606fhid, Enum\ACPI\JHMX0001 из TSC0 в SSDT v6): SE2 SPI 10 МГц, zero-flash (C:\j606f\drv\hxfw.bin), опрос защёлки TLMM gpio86, HID touch screen 10 касаний | ✅ run_19 (перо — нет) |
+| Кнопки | windrv/hidbuttons → hidbuttons.sys (40c264ae…, служба j606fbtn, Enum\Root\J606FBTN): опрос PM6125 по SPMI 20 мс (PON_RT_STS 0x0810: KPDPWR, RESIN = Громкость−; GPIO5 0xC410 = Громкость+), HID Consumer + System Control | ✅ run_21 (громкость без аудиоустройства не видна) |
+| Яркость (проба) | windrv/dsiprobe → dsiprobe.sys (1b0bf7bb…): DCS 0x39 [51 hi lo] через командный DMA DSI0 в видеорежиме, буфер 0x5cfff000 (SMMU CB3 1:1) | ✅ run_22 |
+| Дисплей + ползунок | windrv/j606fdsp: пример MS KMDOD + DXGK_BRIGHTNESS_INTERFACE (0..100 % → 40..4095) | ❌ пока: run_24 (StartDevice — пустой POST-дисплей), run_25 (3feea6a9…, StartDevice с кадровым буфером UEFI → код 43) |
+| GPU, звук, Wi-Fi, BT, камеры, датчики, USB host, RTC, сон, частоты CPU | — | нет (GPU: notes/windows_gpu.md) |
+
+Сборка: legacy/WDM — windrv/build.sh (llvm-mingw + свой j606f_nt.h); KMDOD — windrv/j606fdsp/build_dsp.sh (clang-cl + lld-link + WDK 10.0.28000 на хосте, только локально).
+Все драйверы ставятся без INF: служба + Enum-ключ в хайве или Service в существующем Enum-ключе; тестовая подпись.
