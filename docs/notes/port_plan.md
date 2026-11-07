@@ -1,78 +1,118 @@
-# Порт UEFI на J606F: что есть, что делать, первый эксперимент (2026-11-04)
+# Порт UEFI на J606F: состав, карта памяти, версии, ограничения
 
-## 1. Готовые сборки (проверено 04.11 по GitHub API и README/Status.md)
-- **Project-Aloha/mu_aloha_platforms** (main, push 02.11.2026): Silicon/QC = Msm8996, Msm8998, Sdm670, Sdm845, Sm7125, Sm7150, Sm7325,
-  Sm8150, Sm8250, Sm8350, Sm8450, Sm8550, Sm8850. **SM6115/bengal (Kamorta), SM4250, SM6125, SM6225 — нет.** Ветки тоже без них
-  (main, mu/202511, dev/cafe, waipio/…, tp1803 и др.). J606F нет. Копия README: ref/Aloha_README.md.
-- **Project-Silicium/Mu-Silicium** (main, push 01.11.2026, релиз v4.1): есть SoC-пакет **Silicon/Qualcomm/KamortaPkg** (SM6115 = Snapdragon 662)
-  и 5 устройств на нём (ref/Silicium_Status.md, раздел «Snapdragon 662»):
-  | Устройство | Codename | UEFI | Windows |
+Документ описывает **текущее** состояние порта (ноябрь 2026): как устроен UEFI, что в нём менялось от v3 до v7 и какие ограничения остаются.
+История попыток и пооперационные журналы здесь не приводятся.
+
+## 1. Основа и готовые сборки
+- **Project-Aloha/mu_aloha_platforms** не содержит SM6115 (bengal / Kamorta) ни в main, ни в ветках. J606F там нет.
+- **Project-Silicium/Mu-Silicium** содержит SoC-пакет `Silicon/Qualcomm/KamortaPkg` (SM6115 = Snapdragon 662) и пять устройств на нём.
+  Шаблон для порта — **lime** (Redmi 9T): его набор DXE и карта памяти совпадают с нашим стоковым `xbl_a`.
+  | Устройство | Codename | UEFI | Windows (по Silicium) |
   |---|---|---|---|
-  | Xiaomi Redmi 9T | lime | дисплей, UFS, кнопки, USB device, mass storage | **грузится**: UFS, USB host, CPU, дисплей (FB) |
-  | Motorola Moto G30 | caprip | дисплей, UFS, USB device | **грузится**: UFS, дисплей, CPU «4 Cores only» |
+  | Xiaomi Redmi 9T | lime | дисплей, UFS, кнопки, USB device, mass storage | грузится: UFS, USB host, CPU, дисплей (FB) |
+  | Motorola Moto G30 | caprip | дисплей, UFS, USB device | грузится: UFS, дисплей, CPU «4 Cores only» |
   | Motorola Moto G9 Power | cebu | дисплей, UFS, кнопки, USB host | нет |
   | Samsung Galaxy Tab A7 10.4 | gta4l | дисплей, UFS, USB host, PD | нет |
   | Xiaomi Poco M3 | citrus | дисплей, UFS, SD, mass storage | нет (Linux — да) |
-  Все пять — «Inactive». Предупреждение Silicium для SD662: **«Only 23H2 Windows Builds and Lower are able to Boot»** (Kryo 260 = Cortex-A73/A53,
-  ARMv8.0; 24H2+ требует ARMv8.1 атомики). Lenovo в Silicium — только Tab P11 Pro (j706fPkg, SM7150) и Legion Y700 (9707fPkg); **J606F нет**.
-- Чужих UEFI/WoA-работ именно по Lenovo Tab P11 J606F не нашёл (веб-поиск, GitHub) — это будет первый порт.
+  Предупреждение Silicium для SD662: **«Only 23H2 Windows Builds and Lower are able to Boot»**: Kryo 260 — это Cortex-A73/A53 (ARMv8.0),
+  а 24H2 и новее требуют ARMv8.1 (атомарные операции LSE).
+- Lenovo в Silicium представлен Tab P11 Pro (j706fPkg, SM7150) и Legion Y700 (9707fPkg). **J606F в нём отсутствовал**; наш пакет `j606fPkg` добавлен сюда.
 
-**Вывод: готовой сборки нет, но порт — небольшой.** База — Mu-Silicium (KamortaPkg + шаблон lime), а не mu_aloha_platforms.
+## 2. Состав пакета `j606fPkg`
+Исходники лежат в `uefi/Platforms/Lenovo/j606fPkg/`, копируются поверх дерева Mu-Silicium (см. [BUILD_UEFI](../BUILD_UEFI.md)).
+- `j606f.dsc` / `j606f.fdf` — платформа и раскладка прошивки. Пакет переиспользует `KamortaPkg` и драйверы lime.
+- `Include/{DXE,APRIORI,RAW}.inc` — список DXE-драйверов. Набор совпадает с `xbl_a` J606F, кроме отсутствующего у нас MiToken (Xiaomi).
+- `Library/MemoryMapLib` и `Library/ConfigurationMapLib` — карта памяти и параметры конфигурации (ниже).
+- `Application/J606fBoot` — меню выбора ОС (см. [menu.md](menu.md)); компилируется в состав образа.
+- `uefi/Resources/Configs/j606f.toml` — формат boot-образа: header v1, ядро gzip, DTB приклеен, FD `0x5FC00000` размером `0x300000`.
+- `uefi/Silicium-ACPI/…/SSDT.asl` — SSDT устройства (сейчас v6, см. [windows_drivers_plan.md](windows_drivers_plan.md)).
 
-## 2. Почему порт небольшой (проверено на наших дампах, notes/stock_uefi.md)
-- Набор стоковых DXE-драйверов в нашем `xbl_a` по именам совпадает с тем, что Silicium подключает для lime (DXE.inc).
-- Карта памяти и ConfigParameters нашего `uefiplat.cfg` совпадают с MemoryMapLib/ConfigurationMapLib lime (кроме переноса DXE Heap, который делает сам Silicium).
-- Framebuffer ABL — 0x5C000000 (= «Display Reserved»), 1200x2000x32, его же использует simplefb в pmOS → `SimpleFbDxe` Silicium подойдёт без DisplayDxe.
-- ACPI для Kamorta в Silicium-ACPI уже есть (DSDT: UFS0, SDC1, CPU0–7, URS0/USB0/UFN0; FADT/GTDT/MADT/DBG2); устройству нужен только SSDT
-  (`_STA` для UFS0/URS0/SDC1 и PSUB) — ref/silicium-acpi/.
-- Упаковка (Resources/Configs/<dev>.toml у lime/caprip): Android boot image **header v1**, ядро = BootShim+FD (gzip), **DTB приклеен**;
-  FD base 0x5FC00000 size 0x300000. ABL J606F appended DTB при header v0/v1 уже принимал (pmOS-проект/ LOG 28.10, тест 2).
+Бинарные части берутся **со своего планшета**: `Binaries/j606f` собирается из `xbl_a` скриптами `scripts/fv_extract.py`,
+`scripts/patch_drivers.py`, `scripts/gen_binaries.py` (см. [EXTRACT_BINARIES](../EXTRACT_BINARIES.md)). В публичный репозиторий они не входят.
 
-## 3. Шаги порта (оценка — рабочее время, при доступном хосте)
-1. **Хост сборки** (Ubuntu, `~/j606f-build/` отдельно от ~/j606f): `git clone --recursive Mu-Silicium` (~5 ГБ!), `./setup_env.sh -p apt` (sudo apt:
-   clang/llvm, python3-venv, mono?), `pip -r pip-requirements.txt` в venv. Сначала собрать **lime** без изменений — проверка окружения. 1–2 ч + скачивание.
-   ⚠ 04.11 хост по ssh недоступен (timeout, как и в pmOS-проект/ LOG 04.11) — нужен владелец. Запасной вариант — сборка на самом планшете под pmOS
-   (aarch64, Silicium официально не поддерживает) или Linux-VM.
-2. **Binaries/j606f** из нашего `xbl_a`: для каждого DXE — `.efi` + `.depex` + бинарный `.inf` (GUID/имя из FV), структура как Binaries/lime/QcomPkg/...
-   Доработать scripts/fv_extract.py (секции DXE_DEPEX 0x13, генерация INF). + RawFiles: SecParti.cfg, uefipil.cfg, QcomChargerCfg.cfg, BATTERY.PROVISION,
-   Panel_boe_himax83102p_2k_vid.xml. 2–4 ч. **Только локально** (блобы).
-3. **Platforms/Lenovo/j606fPkg** (копия limePkg): j606f.dsc (SMBIOS Lenovo / TB-J606F, FB 1200x2000x32, PcdSystemMemoryBase 0x40000000, стек 0x5FF90000),
-   j606f.fdf, Include/{DXE,APRIORI,RAW}.inc → Binaries/j606f, MemoryMapLib/ConfigurationMapLib из нашего uefiplat.cfg, DeviceBuild.py. 1–2 ч.
-4. **Resources/Configs/j606f.toml** (как lime) и **Resources/DTBs/j606f.dtb** = стоковый DTB №1 из стокового boot (raw/stock_boot_unpacked/dtb,
-   смещение 0x511b1, 332 261 Б — тот, что ABL выбирает: dtb_idx=1, msm-id 445, board-id 34/3). Silicium-ACPI: Platforms/Lenovo/j606f/SSDT.asl
-   (UFS0 и URS0 вкл., SDC1 выкл. — у J606F SD-карта на sdhc_2, eMMC нет). 30–60 мин.
-5. Сборка `python3 build_uefi.py -d j606f` → `j606f.img` (несколько МБ). 15–30 мин на 4 ядрах.
-6. Первый запуск через `fastboot boot` (ниже). Дальше — итерации (кнопки, USB, mass storage). Итого до первого экрана UEFI: **~1 рабочий день**.
+## 3. Карта памяти (MemoryMapLib, версия v7)
+Ключевые регионы DDR (адреса в шестнадцатеричном виде):
+| Регион | Адрес | Размер | Примечание |
+|---|---|---|---|
+| Kernel | 0x40000000 | 0x05700000 | память ядра Linux, резерв |
+| HYP | 0x45700000 | 0x00600000 | |
+| SMEM | 0x46000000 | 0x00200000 | |
+| PIL Reserved | 0x4AB00000 | 0x09400000 | прошивки подсистем, резерв |
+| **pmOS PIL (v7)** | 0x53F00000 | 0x02300000 | резерв для adsp и zap GPU, нужен Linux |
+| Display Reserved | 0x5C000000 | 0x01000000 | кадровый буфер GOP, 1200×2000 |
+| UEFI FD | 0x5FC00000 | 0x00300000 | сама прошивка |
+| UEFI Stack | 0x5FF90000 | 0x00040000 | |
+| Log Buffer | 0x5FFF7000 | 0x00008000 | не переживает холодный сброс |
+| QSEE | 0x60000000 | 0x01800000 | TrustZone |
+| TZApps | 0x61800000 | 0x02100000 | |
+| DXE Heap | 0x63900000 | 0x04600000 | Silicium переносит кучу DXE сюда из стокового места |
+| **pmOS Rsvd (v7)** | 0x89B01000 | 0x00200000 | резерв reserved-memory pmOS |
 
-## 4. Первый эксперимент — только RAM, ничего не пишет
-```bash
-fastboot reboot bootloader     # обязательно: fastboot boot работает 1 раз за сессию ABL
-fastboot boot j606f.img
-```
-Слот b активен, dtbo_b стёрт → ABL возьмёт приклеенный стоковый DTB без оверлея (стоковый DTB с __symbols__ выдержал бы и оверлей).
-**Ожидаем на экране:** «Booting OKAY» → заставка ABL остаётся → BootShim переносит FD на 0x5FC00000 → DXE поднимает драйверы →
-на framebuffer 1200x2000 (портрет) — логотип/меню загрузки Mu (BdsDxe/UEFI-меню, навигация громкостью, Power — выбор), т.к. ОС на диске нет.
-**Возможные провалы:** через ~9 с обратно в fastboot (ABL не принял образ/DTB); чёрный экран/зависание (DXE; UART нет — только логи);
-перезагрузка или «QUALCOMM CrashDump Mode» (watchdog). **Выход из любого:** зажать Power 15–20 с → ABL → слот b → pmOS.
-Отладка после неудачи: Log Buffer 0x5FFF7000 (не переживает холодный сброс), раздел logfs (стоковый UEFI пишет туда, читать из pmOS только чтением).
+Почему в v7 добавлены два резерва: без них `RamManagerDxe` отдавал эти области как Conventional, и ядро pmOS не могло зарезервировать
+память для adsp и GPU (чёрный экран). Windows от изменения не зависит.
 
-## 5. Windows: путь установки (адаптация гайдов Renegade/Silicium, не выполнять вслепую)
-Страница renegade-project.tech/en/install рендерится JS, WebFetch текста не получил — схема ниже общая для этих проектов.
-1. Windows 11 **23H2 (22631) ARM64** или Windows 10 ARM64 — образ владельца (UUP dump). 24H2/25H2 на SD662 не стартуют.
-2. Место: Windows ≥ 25–40 ГБ во внутренней памяти. Вариант по умолчанию — **ужать pmOS**: свежий бэкап userdata → resize2fs pmOS_root (сейчас
-   занято ~11 ГБ) → ужать раздел во внутренней GPT userdata → ужать userdata (sda15, последний на LUN0) во внешней GPT и создать за ним
-   ESP (FAT32 ~260 МБ) + Windows (NTFS). Внутреннюю GPT после этого поправить (резервный заголовок). SD-карта для Windows не годится (нет драйвера sdhc в Windows).
-3. Запись Windows: UEFI в режиме USB mass storage (UsbMsdDxe) отдаёт UFS как USB-диск → на машине с Windows: DISM /Apply-Image, bcdboot на ESP.
-   На Mac этого нет — нужен ПК/VM с Windows или Linux с wimlib (`wimlib-imagex apply`) + готовый BCD. Решить с владельцем.
-4. Загрузка: UEFI-образ постоянно — в **boot_a** (там сейчас нерабочий Android: userdata = pmOS), выбор ОС — `fastboot set_active a|b`
-   (слот b = pmOS как сейчас). dtbo_a можно не трогать (стоковый DTB + оверлей = как в Android). Бэкап boot_a уже есть (BACKUP/partitions/boot_a.img).
-5. Драйверы: для SM6115 пакета драйверов Windows **нет** (ни у Qualcomm, ни у сообщества) — только ACPI Silicium (UFS, USB, CPU).
+Регионы регистров: TLMM (WEST `0x00500000`, SOUTH `0x00900000`), TCSR, IMEM и др. — из стокового `uefiplat.cfg`.
+В отладочной сборке (`J606F_RAMOOPS_LOG`) добавлен регион «RAM Oops» `0xFFC00000` размером 1 МиБ под консольную зону ramoops ядра pmOS.
 
-## 6. Что реально заработает в Windows (честно)
+## 4. Версии UEFI
+
+| Версия | Что изменилось | Проверено |
+|---|---|---|
+| v3 | первая RELEASE для Windows (Mu-Silicium + пакет j606f, стоковые драйверы Qualcomm) | Windows загружается до рабочего стола |
+| v4 | `EnableChargerWdog = 0` в конфиге зарядника | зарядка в Windows такая же, как в pmOS |
+| v5d | батарея и адаптер в AML через SPMI (компактный SSDT) | 98–100 %, статус «заряжается» |
+| v6 | устройство тача `TSC0` с `_HID JHMX0001` в SSDT | тач работает (драйвер `hidtouch`) |
+| v7 | резерв памяти pmOS в карте памяти; меню J606fBoot в ESP | в `boot_a`, Windows и Linux выбираются через меню |
+
+Версия **v7** записана в `boot_a` (слот a). Слот b остаётся с pmOS через стоковый ABL и служит запасным путём загрузки.
+
+## 5. Ограничения сборки
+
+### 5.1 Раскладка FVMAIN: строго 0x521000
+В выводе сборки строка `FVMAIN [..%Full] … total` должна показывать размер **0x521000**. Образ с 0x522000 не загружается:
+он сбрасывается обратно в Windows / pmOS (причина не найдена). Свободного места в FVMAIN около 56 байт.
+Поэтому:
+- SSDT держим компактным (компактная версия батареи — `acpi/j606f_battery_spmi_compact.asl`);
+- новые ACPI-устройства, которым нужен крупный AML, не добавляем в FVMAIN; драйверы, которым нужен SSDT, работают через вспомогательные
+  устройства (например, `hidbuttons` — корневое устройство `ROOT\J606FBTN` без записи в SSDT).
+
+Меню J606fBoot поэтому вынесено **из FV в ESP** как отдельный EFI-файл: так FVMAIN не растёт.
+
+### 5.2 Сторожевой таймер зарядника (SMB5)
+`QcomChargerDxeLA` с конфигом `EnableChargerWdog = 1` включает сторожевой таймер SMB5: регистр `0x1651` = `0x62`, `0x1653` = `0x8C`.
+Бит 7 регистра `0x1653` (`BITE_WDOG_DISABLE_CHARGING`) означает, что при невыполненном «кормлении» таймера зарядка отключается.
+В Windows никто таймер не кормит, поэтому зарядка прекращалась через секунды–минуты после `ExitBootServices`.
+Решение — `EnableChargerWdog = 0` в `Binaries/j606f/RawFiles/QcomChargerCfg.cfg` (так же настроены kebab, enchilada, pong и gta9pwifi).
+После этого `0x1651 = 00`, `0x1653 = 0C` — как в pmOS.
+
+### 5.3 Отладочные сборки
+- `J606F_MSD_ON_NO_OS` (RELEASE и DEBUG): если ОС нет, UEFI запускает USB и Mass Storage вместо выключения. Выход из режима — Громкость +.
+  Mass Storage на macOS не работает (MODE SENSE зависает), с Windows-ПК мог бы работать.
+- `J606F_RAMOOPS_LOG` (только DEBUG): лог UEFI дублируется в консольную зону ramoops ядра pmOS с чётностью Рида–Соломона,
+  после чего делается тёплый сброс. Лог читается из pmOS из `/var/lib/systemd/pstore/console-ramoops-0`.
+  Патч: `uefi/patches/silicium_j606f_diag.diff`, скрипт `scripts/patch_silicium_diag.py`.
+- В DEBUG-сборке Mass Storage выключается по таймеру через 3 минуты, чтобы не ждать человека.
+
+## 6. Что работает (состояние на ноябрь 2026)
+| Подсистема | Статус | Примечание |
+|---|---|---|
+| UEFI в `boot_a` (v7) | ✅ | `fastboot boot` для проверок, запись в `boot_a` для постоянного использования |
+| Меню Windows / Linux | ✅ | см. [menu.md](menu.md) |
+| UFS | ✅ | Windows видит через ACPI `UFS0` (QCOM24A5), драйвер `storufs` из Windows |
+| Экран (кадровый буфер) | ✅ | Basic Display поверх GOP, 1200×2000, портрет |
+| Батарея, адаптер | ✅ | ACPI BAT0 / ADP0 по SPMI, см. [windows_drivers_plan.md](windows_drivers_plan.md) |
+| Зарядка | ✅ | `EnableChargerWdog = 0` |
+| Тач | ✅ | `hidtouch`, перо не реализовано |
+| Кнопки | ✅ | `hidbuttons`: питание; громкость — отчёты без звука |
+| Яркость из Windows по DSI | 🚧 | доказана `dsiprobe`; слайдер — драйвер `j606fdsp` в работе |
+| USB host, Wi-Fi, BT, звук, GPU, камеры, датчики, RTC, сон, частоты CPU | ❌ | см. [windows_gpu.md](windows_gpu.md) и [windows_drivers_plan.md](windows_drivers_plan.md) |
+
+## 7. Ожидания по подсистемам (исходная таблица, правки владельца от 07.11)
+
 | Подсистема | Ожидание | Почему |
 |---|---|---|
 | Загрузка, UFS | ✅ (как у lime/caprip) | UFS0 в DSDT Kamorta |
-| Экран | ✅ только базовый framebuffer (Microsoft Basic Display), 1200x2000, портрет; поворот вручную; яркость регулируется | драйвера Adreno 610/MDSS для Windows нет |
+| Экран | ✅ только базовый framebuffer (Microsoft Basic Display), 1200x2000, портрет; поворот вручную; яркость пока не регулируется (слайдер в работе, драйвер `j606fdsp` даёт код 43) | драйвера Adreno 610/MDSS для Windows нет |
 | CPU | ⚠ 4–8 ядер, частота не управляется (как оставил загрузчик) — медленно | нет PEP/драйверов питания SM6115 |
 | USB-C host (клавиатура, мышь, флешка, USB-Ethernet) | ❔ у lime работает; у J606F VBUS дают FUSB302+буст gpio38 — может понадобиться хаб с питанием | URS0 в DSDT, но без драйвера Type-C |
 | Тач (Himax HX83102E, SPI, zero-flash) | ✅ | полноценно работает |

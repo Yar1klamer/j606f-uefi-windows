@@ -1,50 +1,51 @@
-# Windows на J606F: как ставить (2026-11-04, после тестов U1–U4)
+# Windows на J606F: как она установлена и как работает загрузка
 
-> **Выполнено (вариант B, 04.11):** Windows поставлена из pmOS (wimlib + WinPE + bcdboot). Текущее состояние — STATE.md.
+Документ описывает итоговую схему: какая Windows стоит на планшете, где лежат её разделы, как она загружается и почему выбран такой путь.
+Пошаговые команды для повторения — в [INSTALL_WINDOWS.md](../INSTALL_WINDOWS.md).
 
-## Что уже доказано
-- UEFI j606f (Mu-Silicium, KamortaPkg) грузится через `fastboot boot`: SEC → DXE → BDS, все драйверы Qualcomm из нашего xbl_a стартуют,
-  UFS (Micron MT128GASAO4U21) виден, таблицы ACPI ставятся (AcpiPlatform), SimpleFb на 0x5C000000. Лог — raw/uefi_logs/u3_d2.log.
-- Mass Storage UEFI поднимается (05c6:f000, SCSI BOT), LUN0 = UFS LU0 (sda, 114,9 ГиБ, сектор 4096), но **macOS с ним не работает**
-  (MODE SENSE зависает, raw/uefi_logs/u4_mac_kernel_usb.log). С Windows-ПК им пользуются lime/caprip — у нас не проверено.
-- Windows видит UFS через ACPI `UFS0` (_HID QCOM24A5) — так грузится lime; драйвера для тача/Wi-Fi/звука/GPU нет (notes/port_plan.md §6).
+## 1. Итог
+- Установлена **Windows 11 Pro ARM64, сборка 22621 (22H2), язык ru-RU**. Образ собран из ISO 22621 (UUP dump), без обновлений на Linux.
+- Установка выполнена **из установленного postmarketOS на том же устройстве, без ПК с Windows**.
+- Загрузка выбирается меню J606fBoot ([menu.md](menu.md)). Windows грузится через `bootmgfw.efi` из ESP.
+- Windows 24H2 и новее на SD662 не стартуют (ARMv8.0), поэтому выбрана 22H2.
 
-## Что нужно от владельца (блокеры)
-1. **Образ Windows 11 23H2 ARM64 (сборка 22631)** — свой ISO/ESD или «да» на скачивание через UUP dump (файлы Microsoft, ~4–5 ГБ ESD +
-   конвертация в ISO на хосте сборки). 24H2/25H2 на SD662 не стартуют.
-2. **Чем ставить:** (A) есть ПК с Windows → классика Silicium через Mass Storage; (B) ПК нет → всё на планшете через pmOS (дольше, но без ПК).
-3. **Место:** Windows ставится на LUN0 (sda) после userdata. userdata (sda15, 102,5 ГиБ) = pmOS (вложенная GPT: pmOS_boot 480 МиБ + pmOS_root ~102 ГиБ,
-   занято ~11 ГБ). Варианты: ужать pmOS до ~24 ГиБ и отдать ~78 ГиБ под Windows (pmOS остаётся) или удалить pmOS целиком
-   (есть BACKUP/userdata-backup-20261103.simg и релизный архив pmOS → вернуть можно).
+## 2. Разметка LUN0 (UFS) после установки
+| Раздел | Размер | Тип | Назначение |
+|---|---|---|---|
+| sda1…sda14 | — | Qualcomm / Lenovo | не трогались: persist, modem, fsg, keystore и др. |
+| sda15 `userdata` | 24 ГиБ | Linux | pmOS (вложенная GPT: pmOS_boot и pmOS_root, ~22,7 ГиБ) |
+| sda16 `esp` | 512 МиБ | EF00, FAT32 | загрузчики UEFI, меню, BCD Windows, журналы меню и WinPE |
+| sda17 `win` | 77,9 ГиБ | 0700, NTFS | Windows (`C:`) |
 
-## Разметка LUN0 (общая для A и B)
-Сейчас: sda1…sda14 (ssd, **persist**, misc, keystore, frp, fpinfo, lenovocust, lenovoraw, recovery_a/b, vbmeta_system_a/b, metadata, super),
-sda15 userdata — последний. Трогаем **только sda15 и место за ним**:
-1. Бэкап: pmOS_root (e2image/dd по USB-сети на Mac) + внешняя GPT sda (первые и последние 6 секторов по 4К) + вложенная GPT userdata.
-2. Ужать pmOS (если оставляем): из initramfs pmOS (`pmos.debug-shell`, root не смонтирован) — `e2fsck -f` + `resize2fs` pmOS_root до ~22 ГиБ →
-   ужать раздел во вложенной GPT → перенести её резервный заголовок.
-3. Внешняя GPT: sda15 ужать до ~24 ГиБ (`sgdisk -d 15 -n 15:<тот же старт>:+24G -t/-c/-u` с прежними type/name/PARTUUID),
-   затем `esp` 512 МиБ (EF00, FAT32, сектор 4К → FAT32 требует ≥ 65525 кластеров: 512 МиБ / 4К = 131072 — ок) и `win` NTFS (0700) на остаток.
-4. Каждая запись — в LOG до выполнения, с sha256 бэкапов и командой отката (`sgdisk --load-backup`).
+Пространство для Windows получено **ужатием pmOS**: `resize2fs` уменьшил корневую файловую систему pmOS, после чего вложенная и внешняя GPT
+сдвинуты. Скрипт — `scripts/shrink_pmos_for_windows.sh`. Перед этим делается бэкап: образ `userdata` и таблицы разделов.
 
-## Вариант A — ПК с Windows (как у lime/caprip)
-1. `fastboot boot out/v3/Mu-j606f.img` (без ОС UEFI сам уходит в Mass Storage; выход — Громкость+).
-2. На ПК: diskpart — выбрать диск ~115 ГБ **по размеру**, `list partition`, форматировать только `esp`/`win` (созданные на шаге 3 выше; или создать их
-   на ПК в свободном месте), назначить буквы S: и W:.
-3. `dism /apply-image /imagefile:install.wim /index:<Pro> /applydir:W:\` → `bcdboot W:\Windows /s S: /f UEFI` →
-   `bcdedit /store S:\EFI\Microsoft\Boot\BCD /set {default} testsigning on` и `nointegritychecks on` (как в гайдах Silicium) → извлечь.
-4. Загрузка: `fastboot boot out/v3/Mu-j606f.img` → Silicium «Internal Storage» найдёт \EFI\Boot\bootaa64.efi на `esp`.
+## 3. Как попала Windows на устройство
+1. **Развёртывание.** Образ `install.wim` (индекс Pro) передаётся потоком `wimlib-imagex apply` в NTFS-раздел `sda17` в режиме NTFS-3G.
+   Предупреждения о расширенных атрибутах (`$CI.CATALOGHINT` и др.) безвредны.
+2. **Защита прочих разделов.** В офлайн-хайве SYSTEM задано `SanPolicy = 4` (`partmgr`). Тогда Windows не монтирует ни один внутренний диск
+   кроме своего. `modem_b` проверен по хешу после установки: не изменён.
+3. **Загрузчик.** `bcdboot` выполняется в **WinPE**, который загружается тем же UEFI с ESP. `scripts/winpe/j606f.cmd` находит `\Windows`,
+   создаёт BCD на ESP, выставляет `testsigning on` и `nointegritychecks on`, пишет лог `S:\j606f_pe.log` и перезагружает устройство.
+   Файлы WinPE после этого удаляются с ESP.
+4. **Первая загрузка.** `scripts/winpe/unattend.xml` кладётся в `W:\Windows\Panther`: язык ru-RU, локальная учётная запись `User` без пароля,
+   автовход, пропуск OOBE, `SanPolicy = 4` в фазе specialize.
+5. **Постоянный выбор ОС.** Меню J606fBoot находится в ESP как `bootaa64.efi`, исходный загрузчик — рядом как `bootaa64.windows.efi`.
 
-## Вариант B — без ПК, на самом планшете (pmOS как установщик)
-1. Разметка как выше (из pmOS/initramfs). `mkfs.vfat -F32 -S 4096` для esp, `mkntfs -Q -s 4096` для win (ntfs-3g).
-2. `wimlib-imagex apply install.wim <index> /dev/sdaN` (режим NTFS-3G, сохраняет ACL/атрибуты) — пакеты Alpine `wimlib`, `ntfs-3g-progs`.
-3. Загрузчик: BCD нужно создать без bcdboot. Надёжный путь — WinPE из того же ISO: положить на esp файлы загрузки ISO (\EFI, \boot, \sources\boot.wim,
-   их BCD универсальный: ramdisk=[boot]\sources\boot.wim), в boot.wim (индекс 2) через `wimlib-imagex update` добавить `winpeshl.ini` + скрипт:
-   diskpart (буквы по меткам томов) → `bcdboot W:\Windows /s S: /f UEFI` → bcdedit testsigning/nointegritychecks → лог на esp → `wpeutil reboot`.
-   Затем убрать файлы WinPE с esp. Всё без клавиатуры; результат читается из pmOS (лог на esp).
-4. Загрузка Windows: как в A.4. Первый запуск (OOBE) требует ввода: USB-клавиатура/мышь через OTG (VBUS у J606F — FUSB302 + буст gpio38,
-   может понадобиться хаб с питанием) или `unattend.xml` с локальной учёткой и пропуском OOBE (кладётся в W:\Windows\Panther\ до первой загрузки).
+## 4. Как загружается Windows сейчас
+- UEFI v7 в `boot_a` → меню в ESP → `bootmgfw.efi` → `winload.efi` → Windows.
+- Выбор по умолчанию хранится в `\EFI\Boot\j606fboot.def`. Управление: Громкость ± выбирает, Питание загружает.
+- Для возврата в pmOS: перезагрузка Windows → меню → Linux, или `fastboot set_active b` для загрузки через стоковый ABL.
 
-## Постоянная установка UEFI
-После того как Windows загрузится через `fastboot boot`: записать UEFI (RELEASE) в **boot_a**, переключать ОС `fastboot set_active a|b`
-(b = pmOS). boot_a сейчас — сток+Magisk, бэкап <бэкап разделов>/boot_a.img. Запись — только после LOG и с sha256.
+## 5. Что важно помнить при обслуживании
+- **Выключать Windows только перезагрузкой.** Быстрый запуск (hiberboot) оставляет NTFS в спящем состоянии, и ntfs-3g из pmOS её не монтирует.
+  Агент выставляет `HiberbootEnabled = 0` и `powercfg /h off`.
+- После принудительного выключения NTFS «грязная»: ntfs-3g монтирует её только для чтения. Лучше одна штатная загрузка Windows;
+  крайний случай — `ntfsfix`.
+- Хайв SYSTEM менять только в «чистом» состоянии (seq1 = seq2 в заголовке), иначе Windows проиграет журнал поверх изменений.
+- Часы Windows стоят на 2022 годе: RTC не выставляется. Это ограничение UEFI, а не Windows.
+- Сон и USB device-mode в Windows не работают; планшет не виден с Mac по USB.
+
+## 6. Что не работает в Windows
+Звук, Wi-Fi, Bluetooth, GPU-ускорение, камеры, датчики, USB host, перо, яркость с ползунком, часы, сон. Подробно — в
+[windows_drivers_plan.md](windows_drivers_plan.md) и [windows_gpu.md](windows_gpu.md).
