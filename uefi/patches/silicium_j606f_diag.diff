@@ -1,0 +1,296 @@
+diff --git a/Mu_Basecore b/Mu_Basecore
+--- a/Mu_Basecore
++++ b/Mu_Basecore
+@@ -1 +1 @@
+-Subproject commit 42d6d889f7c1f27e3226b44074b8a0ffe21cd988
++Subproject commit 42d6d889f7c1f27e3226b44074b8a0ffe21cd988-dirty
+diff --git a/Silicon/Qualcomm/QcomPkg/Applications/MassStorage/MassStorage.c b/Silicon/Qualcomm/QcomPkg/Applications/MassStorage/MassStorage.c
+index 8171781..8b56461 100644
+--- a/Silicon/Qualcomm/QcomPkg/Applications/MassStorage/MassStorage.c
++++ b/Silicon/Qualcomm/QcomPkg/Applications/MassStorage/MassStorage.c
+@@ -73,12 +73,29 @@ MassStorageStart ()
+ 
+   // Start USB Device
+   Status = mUsbMsdProtocol->StartDevice (mUsbMsdProtocol);
++#ifdef J606F_RAMOOPS_LOG
++  DEBUG ((EFI_D_ERROR, "J606F: StartDevice %r\n", Status));
++#endif
+   if (EFI_ERROR (Status)) {
+     DEBUG ((EFI_D_ERROR, "%a: Failed to Start USB Device! Status = %r\n", __FUNCTION__, Status));
+     return;
+   }
+ 
++#ifdef J606F_RAMOOPS_LOG
++  // uefi-winarm (J606F): leave Mass Storage after 3 minutes in diagnostic builds (nobody to press Volume Up)
++  EFI_EVENT TimeoutEvent = NULL;
++  gBS->CreateEvent (EVT_TIMER, 0, NULL, NULL, &TimeoutEvent);
++  gBS->SetTimer (TimeoutEvent, TimerRelative, 180ULL * 10000000);
++#endif
++
+   while (TRUE) {
++#ifdef J606F_RAMOOPS_LOG
++    if (TimeoutEvent != NULL && gBS->CheckEvent (TimeoutEvent) == EFI_SUCCESS) {
++      DEBUG ((EFI_D_ERROR, "J606F: Mass Storage timeout\n"));
++      break;
++    }
++#endif
++
+     // Handle USB Events
+     mUsbMsdProtocol->EventHandler (mUsbMsdProtocol);
+ 
+@@ -125,6 +142,10 @@ AssignStorageHandles ()
+     AssignableMsdLuns = 2;
+   }
+ 
++#ifdef J606F_RAMOOPS_LOG
++  DEBUG ((EFI_D_ERROR, "J606F: QueryMaxLun %r, AssignableMsdLuns %u\n", Status, AssignableMsdLuns));
++#endif
++
+   // Go thru each Storage
+   for (UINT8 i = 0; i < ARRAY_SIZE (StorageGuid); i++) {
+     // Compare Assigned and Assignable LUNs
+@@ -140,6 +161,9 @@ AssignStorageHandles ()
+ 
+     // Locate Storage Device Path
+     Status = gBS->LocateDevicePath (&gEfiBlockIoProtocolGuid, &StorageDevicePath, &ProtocolHandle);
++#ifdef J606F_RAMOOPS_LOG
++    DEBUG ((EFI_D_ERROR, "J606F: storage %u (%g): %r\n", i, &StorageGuid[i], Status));
++#endif
+     if (EFI_ERROR (Status)) {
+       continue;
+     }
+@@ -153,6 +177,10 @@ AssignStorageHandles ()
+ 
+     // Assign Storage BLKIO Protocol
+     Status = mUsbMsdProtocol->AssignBlkIoHandle (mUsbMsdProtocol, BlkIoProtocol, AssignedMsdLuns);
++#ifdef J606F_RAMOOPS_LOG
++    DEBUG ((EFI_D_ERROR, "J606F: AssignBlkIoHandle LUN %u: %r (media %u, last LBA 0x%lx)\n", AssignedMsdLuns, Status,
++            BlkIoProtocol->Media->MediaId, BlkIoProtocol->Media->LastBlock));
++#endif
+     if (!EFI_ERROR (Status)) {
+       AssignedMsdLuns++;
+     }
+diff --git a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
+index fdf407b..e5557ad 100644
+--- a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
++++ b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
+@@ -207,6 +207,39 @@ PlatformBootManagerUnableToBoot ()
+   // Execute Secondary Unable To Boot
+   DeviceBootManagerUnableToBoot ();
+ 
++#ifdef J606F_MSD_ON_NO_OS
++  // uefi-winarm (J606F): no OS -> start the hidden "Mass Storage" option instead of shutting down
++  {
++    EFI_BOOT_MANAGER_LOAD_OPTION *Options;
++    UINTN                         OptionCount;
++
++    // The USB controller is started on demand (boot menu); start it and connect its drivers so UsbMsdDxe finds the USBFN IO protocol
++    PlatformBootManagerOnDemandConInConnect ();
++    EfiBootManagerConnectAll ();
++
++    Options = EfiBootManagerGetLoadOptions (&OptionCount, LoadOptionTypeBoot);
++#ifdef J606F_RAMOOPS_LOG
++    DEBUG ((EFI_D_ERROR, "J606F: no OS, %u boot options\n", OptionCount));
++    for (UINTN i = 0; i < OptionCount; i++) {
++      DEBUG ((EFI_D_ERROR, "J606F: Boot%04x \"%s\" attr 0x%x\n", Options[i].OptionNumber, Options[i].Description, Options[i].Attributes));
++    }
++#endif
++    for (UINTN i = 0; i < OptionCount; i++) {
++      if (Options[i].Description != NULL && StrCmp (Options[i].Description, L"Mass Storage") == 0) {
++        EfiBootManagerBoot (&Options[i]);
++#ifdef J606F_RAMOOPS_LOG
++        DEBUG ((EFI_D_ERROR, "J606F: Mass Storage returned %r\n", Options[i].Status));
++#endif
++        break;
++      }
++    }
++
++    if (Options != NULL) {
++      EfiBootManagerFreeLoadOptions (Options, OptionCount);
++    }
++  }
++#endif
++
+   // Display No Boot OS Logo
+   Status = DisplayBootGraphic (BG_NO_BOOT_OS);
+   if (EFI_ERROR (Status)) {
+@@ -217,6 +250,12 @@ PlatformBootManagerUnableToBoot ()
+   // Wait 10s
+   gBS->Stall (10000000);
+ 
++#ifdef J606F_RAMOOPS_LOG
++  // uefi-winarm (J606F): warm reset keeps the ramoops log for pmOS
++  DEBUG ((EFI_D_ERROR, "J606F: warm reset\n"));
++  gRT->ResetSystem (EfiResetWarm, EFI_SUCCESS, 0, NULL);
++#endif
++
+   // Shutdown
+   gRT->ResetSystem (EfiResetShutdown, EFI_SUCCESS, 0, NULL);
+ 
+diff --git a/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/FrameBufferSerialPortLib.c b/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/FrameBufferSerialPortLib.c
+index d2844e0..ad0730b 100644
+--- a/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/FrameBufferSerialPortLib.c
++++ b/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/FrameBufferSerialPortLib.c
+@@ -238,6 +238,119 @@ GetFrameBufferMemory (
+   return EFI_SUCCESS;
+ }
+ 
++#ifdef J606F_RAMOOPS_LOG
++// uefi-winarm (J606F): mirror the log into the console zone of the pmOS ramoops region (0xFFC00000, 1 MiB: 640 KiB dmesg records,
++// then 256 KiB console). After a warm reset pmOS shows it as /sys/fs/pstore/console-ramoops-0. The zone has ECC 16 (RS over 128-byte
++// blocks + the 12-byte header): without valid parity the kernel "corrects" our header back to its old values, so parity is written too.
++#define J606F_RAMOOPS_CONSOLE  0xFFCA0000
++#define J606F_RAMOOPS_SIG      0x43474244
++#define J606F_RAMOOPS_DATA     232980
++#define J606F_RAMOOPS_BLOCKS   ((J606F_RAMOOPS_DATA + 127) / 128)
++
++STATIC CONST UINT8 mJ606fRsAlpha[256] = {1,2,4,8,16,32,64,128,29,58,116,232,205,135,19,38,76,152,45,90,180,117,234,201,143,3,6,12,24,48,96,192,157,39,78,156,37,74,148,53,106,212,181,119,238,193,159,35,70,140,5,10,20,40,80,160,93,186,105,210,185,111,222,161,95,190,97,194,153,47,94,188,101,202,137,15,30,60,120,240,253,231,211,187,107,214,177,127,254,225,223,163,91,182,113,226,217,175,67,134,17,34,68,136,13,26,52,104,208,189,103,206,129,31,62,124,248,237,199,147,59,118,236,197,151,51,102,204,133,23,46,92,184,109,218,169,79,158,33,66,132,21,42,84,168,77,154,41,82,164,85,170,73,146,57,114,228,213,183,115,230,209,191,99,198,145,63,126,252,229,215,179,123,246,241,255,227,219,171,75,150,49,98,196,149,55,110,220,165,87,174,65,130,25,50,100,200,141,7,14,28,56,112,224,221,167,83,166,81,162,89,178,121,242,249,239,195,155,43,86,172,69,138,9,18,36,72,144,61,122,244,245,247,243,251,235,203,139,11,22,44,88,176,125,250,233,207,131,27,54,108,216,173,71,142,0};
++STATIC CONST UINT8 mJ606fRsIndex[256] = {255,0,1,25,2,50,26,198,3,223,51,238,27,104,199,75,4,100,224,14,52,141,239,129,28,193,105,248,200,8,76,113,5,138,101,47,225,36,15,33,53,147,142,218,240,18,130,69,29,181,194,125,106,39,249,185,201,154,9,120,77,228,114,166,6,191,139,98,102,221,48,253,226,152,37,179,16,145,34,136,54,208,148,206,143,150,219,189,241,210,19,92,131,56,70,64,30,66,182,163,195,72,126,110,107,58,40,84,250,133,186,61,202,94,155,159,10,21,121,43,78,212,229,172,115,243,167,87,7,112,192,247,140,128,99,13,103,74,222,237,49,197,254,24,227,165,153,119,38,184,180,124,17,68,146,217,35,32,137,46,55,63,209,91,149,188,207,205,144,135,151,178,220,252,190,97,242,86,211,171,20,42,93,158,132,60,57,83,71,109,65,162,31,45,67,216,183,123,164,118,196,23,73,236,127,12,111,246,108,161,59,82,41,157,85,170,251,96,134,177,187,204,62,90,203,89,95,176,156,169,160,81,11,245,22,235,122,117,44,215,79,174,213,233,230,231,173,232,116,214,244,234,168,80,88,175};
++STATIC CONST UINT8 mJ606fRsGen[17] = {120,225,194,182,169,147,191,91,3,76,161,102,109,107,104,120,0};
++
++// Reed-Solomon parity as the kernel's encode_rs8 (init_rs (8, 0x11d, 0, 1, 16)) used by pstore/ram ECC
++STATIC
++VOID
++J606fRsEncode (
++  IN  volatile UINT8 *Data,
++  IN  UINTN           Length,
++  OUT volatile UINT8 *Parity)
++{
++  UINT8 Par[16] = {0};
++
++  for (UINTN i = 0; i < Length; i++) {
++    UINT8 Feedback = mJ606fRsIndex[Data[i] ^ Par[0]];
++
++    if (Feedback != 255) {
++      for (UINTN j = 1; j < 16; j++) {
++        Par[j] ^= mJ606fRsAlpha[(Feedback + mJ606fRsGen[16 - j]) % 255];
++      }
++    }
++
++    for (UINTN j = 0; j < 15; j++) {
++      Par[j] = Par[j + 1];
++    }
++
++    Par[15] = (Feedback != 255) ? mJ606fRsAlpha[(Feedback + mJ606fRsGen[0]) % 255] : 0;
++  }
++
++  for (UINTN i = 0; i < 16; i++) {
++    Parity[i] = Par[i];
++  }
++}
++
++STATIC
++VOID
++J606fRamoopsEncodeBlock (IN UINT32 Block)
++{
++  volatile UINT8 *Data   = (volatile UINT8 *)(J606F_RAMOOPS_CONSOLE + 12);
++  volatile UINT8 *Parity = Data + J606F_RAMOOPS_DATA;
++  UINT32          Length = J606F_RAMOOPS_DATA - Block * 128;
++
++  J606fRsEncode (Data + Block * 128, (Length < 128) ? Length : 128, Parity + Block * 16);
++}
++
++STATIC
++VOID
++WriteRamoops (
++  IN UINT8 *Buffer,
++  IN UINTN  NumberOfBytes)
++{
++  volatile UINT32 *Header = (volatile UINT32 *)J606F_RAMOOPS_CONSOLE;
++  volatile UINT8  *Data   = (volatile UINT8 *)(J606F_RAMOOPS_CONSOLE + 12);
++
++  if (NumberOfBytes == 0) {
++    return;
++  }
++
++  // Header: Sig, Start (next write position), Size (valid bytes)
++  if (Header[0] != J606F_RAMOOPS_SIG || Header[1] >= J606F_RAMOOPS_DATA || Header[2] > J606F_RAMOOPS_DATA) {
++    Header[1] = 0;
++    Header[2] = 0;
++    Header[0] = J606F_RAMOOPS_SIG;
++  }
++
++  UINT32 First = Header[1];
++  UINT32 Start = First;
++  UINT32 Size  = Header[2];
++
++  for (UINTN i = 0; i < NumberOfBytes; i++) {
++    Data[Start] = Buffer[i];
++    Start       = (Start + 1) % J606F_RAMOOPS_DATA;
++    if (Size < J606F_RAMOOPS_DATA) {
++      Size++;
++    }
++  }
++
++  Header[1] = Start;
++  Header[2] = Size;
++
++  // Parity of every touched data block, then of the header
++  if (NumberOfBytes >= J606F_RAMOOPS_DATA) {
++    for (UINT32 Block = 0; Block < J606F_RAMOOPS_BLOCKS; Block++) {
++      J606fRamoopsEncodeBlock (Block);
++    }
++  } else {
++    UINT32 Block = First / 128;
++    UINT32 Last  = ((First + NumberOfBytes - 1) % J606F_RAMOOPS_DATA) / 128;
++
++    while (TRUE) {
++      J606fRamoopsEncodeBlock (Block);
++      if (Block == Last) {
++        break;
++      }
++
++      Block = (Block + 1) % J606F_RAMOOPS_BLOCKS;
++    }
++  }
++
++  J606fRsEncode ((volatile UINT8 *)Header, 12, Data + J606F_RAMOOPS_DATA + J606F_RAMOOPS_BLOCKS * 16);
++}
++#endif
++
+ UINTN
+ EFIAPI
+ SerialPortWrite (
+@@ -248,6 +361,10 @@ SerialPortWrite (
+   EFI_PHYSICAL_ADDRESS FbBase;
+   UINT64               FbLength;
+ 
++#ifdef J606F_RAMOOPS_LOG
++  WriteRamoops (Buffer, NumberOfBytes);
++#endif
++
+   // Get Frame Buffer Memory
+   Status = GetFrameBufferMemory (&FbBase, &FbLength);
+   if (EFI_ERROR (Status)) {
+diff --git a/Silicon/Silicium/SiliciumPkg/Sec/Sec.c b/Silicon/Silicium/SiliciumPkg/Sec/Sec.c
+index 8d586b3..0b6444e 100644
+--- a/Silicon/Silicium/SiliciumPkg/Sec/Sec.c
++++ b/Silicon/Silicium/SiliciumPkg/Sec/Sec.c
+@@ -94,6 +94,11 @@ SecMain (VOID)
+ {
+   EFI_STATUS Status;
+ 
++#ifdef J606F_RAMOOPS_LOG
++  // uefi-winarm (J606F): start a fresh log in the ramoops console zone
++  *(volatile UINT32 *)0xFFCA0000 = 0;
++#endif
++
+   // Do Platform Specific Initialization
+   PlatformInitialize ();
+ 
+diff --git a/build_uefi.py b/build_uefi.py
+index 0d08e3f..51d462d 100755
+--- a/build_uefi.py
++++ b/build_uefi.py
+@@ -12,7 +12,10 @@ import subprocess
+ import coloredlogs
+ import argparse
+ import logging
+-import tomllib
++try:
++    import tomllib
++except ModuleNotFoundError:  # Python 3.10: tomli (uefi-winarm)
++    import tomli as tomllib
+ 
+ #
+ # Logger

@@ -1,0 +1,4 @@
+; Import library for HIDCLASS.SYS (Windows ARM64): HID minidriver registration. Build: llvm-dlltool -m arm64 -d hidclass.def -l libhidclass.a
+LIBRARY HIDCLASS.SYS
+EXPORTS
+HidRegisterMinidriver

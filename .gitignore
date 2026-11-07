@@ -1,0 +1,25 @@
+# never commit binaries, images, firmware, keys or dumps
+out/
+raw/
+BACKUP/
+Binaries/
+*.sys
+*.efi
+*.te
+*.depex
+*.aml
+*.dtb
+*.img
+*.wim
+*.esd
+*.iso
+*.bin
+*.cer
+*.crt
+*.key
+*.pfx
+*.p12
+*.pem
+*.log
+__pycache__/
+.DS_Store
