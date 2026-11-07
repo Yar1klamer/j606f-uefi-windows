@@ -150,8 +150,8 @@ fastboot boot Mu-j606f.img                   # только RAM, ничего н
 
 Лицензии по частям — в [LICENSE](LICENSE). Коротко:
 - `uefi/` — BSD-2-Clause-Patent;
-- `windrv/j606fdsp/` — свой код MIT; сам пример KMDOD (MS-PL) — не входит, файлы патча вставляются в него на вашей машине;
-- `windrv/touch/` и `windrv/hidtouch/` — **лицензия пока не решена**;
+- `windrv/j606fdsp/` — MIT; сам пример KMDOD (MS-PL) не входит, файлы патча вставляются в него на вашей машине;
+- `windrv/touch/` и `windrv/hidtouch/` — GPL-2.0-only;
 - остальное (`acpi/`, прочий `windrv/`, `scripts/`, `docs/`) — MIT.
 
 Windows, WinPE, драйверы Qualcomm и Lenovo, прошивка тача — собственность их владельцев, в репозитории их нет.

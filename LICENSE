@@ -6,12 +6,12 @@ This repository contains code under several licenses.
    Upstream copyright notices are kept in the files. SPDX-License-Identifier: BSD-2-Clause-Patent
    Full text: https://opensource.org/licenses/BSDplusPatent
 
-2. windrv/touch/ and windrv/hidtouch/ — license TBD (not yet decided by the owner)
+2. windrv/touch/ and windrv/hidtouch/ — GPL-2.0-only (SPDX-License-Identifier: GPL-2.0-only)
 
-   The Himax HX83102E bring-up sequences may derive from the GPL-2.0 Himax touch driver (Lenovo kernel / mainline port).
-   Until the owner decides, these files must not be published under a license of their own. Do not treat them as MIT.
+   The Himax HX83102E bring-up sequences in these drivers follow the GPL-2.0 Himax touch driver (Lenovo kernel / mainline port).
+   Full text: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
-3. windrv/j606fdsp/ — our own code (j606f_bl.cxx, patch_kmdod.sh, build_dsp.sh): proposed MIT, owner to confirm.
+3. windrv/j606fdsp/ — MIT (own code: j606f_bl.cxx, patch_kmdod.sh, build_dsp.sh).
    The Microsoft KMDOD sample (MS-PL) is NOT included: patch_kmdod.sh inserts short fragments into the sample's files
    on the user's machine. The sample and the WDK are downloaded by the user from Microsoft.
 
