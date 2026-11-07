@@ -26,12 +26,12 @@
 - ACPI для Kamorta в Silicium-ACPI уже есть (DSDT: UFS0, SDC1, CPU0–7, URS0/USB0/UFN0; FADT/GTDT/MADT/DBG2); устройству нужен только SSDT
   (`_STA` для UFS0/URS0/SDC1 и PSUB) — ref/silicium-acpi/.
 - Упаковка (Resources/Configs/<dev>.toml у lime/caprip): Android boot image **header v1**, ядро = BootShim+FD (gzip), **DTB приклеен**;
-  FD base 0x5FC00000 size 0x300000. ABL J606F appended DTB при header v0/v1 уже принимал (pmos-j606f LOG 28.10, тест 2).
+  FD base 0x5FC00000 size 0x300000. ABL J606F appended DTB при header v0/v1 уже принимал (pmOS-проект/ LOG 28.10, тест 2).
 
 ## 3. Шаги порта (оценка — рабочее время, при доступном хосте)
 1. **Хост сборки** (Ubuntu, `~/j606f-build/` отдельно от ~/j606f): `git clone --recursive Mu-Silicium` (~5 ГБ!), `./setup_env.sh -p apt` (sudo apt:
    clang/llvm, python3-venv, mono?), `pip -r pip-requirements.txt` в venv. Сначала собрать **lime** без изменений — проверка окружения. 1–2 ч + скачивание.
-   ⚠ 04.11 хост по ssh недоступен (timeout, как и в pmos-j606f LOG 04.11) — нужен владелец. Запасной вариант — сборка на самом планшете под pmOS
+   ⚠ 04.11 хост по ssh недоступен (timeout, как и в pmOS-проект/ LOG 04.11) — нужен владелец. Запасной вариант — сборка на самом планшете под pmOS
    (aarch64, Silicium официально не поддерживает) или Linux-VM.
 2. **Binaries/j606f** из нашего `xbl_a`: для каждого DXE — `.efi` + `.depex` + бинарный `.inf` (GUID/имя из FV), структура как Binaries/lime/QcomPkg/...
    Доработать scripts/fv_extract.py (секции DXE_DEPEX 0x13, генерация INF). + RawFiles: SecParti.cfg, uefipil.cfg, QcomChargerCfg.cfg, BATTERY.PROVISION,

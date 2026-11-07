@@ -6,7 +6,7 @@
 - Windows рисует через **Microsoft Basic Display Driver** (`ROOT\BasicDisplay\0000`, basicdisplay.inf, raw/win_run03/devices_all.txt):
   кадровый буфер GOP из UEFI, без 3D-ускорения (всё рисует процессор через WARP), без управления яркостью, без смены режима.
 - Яркость остаётся той, что выставили UEFI/загрузчик. В pmOS яркость = DCS 0x51 (12 бит) по DSI в TCON панели, SGM37604A включён pmi632 gpio6
-  (../pmos-j606f/notes/backlight.md).
+  (<pmOS-проект>/notes/backlight.md).
 
 ## 1. Существующие Windows-драйверы Adreno (qcdx*)
 | Пакет | SoC | GPU | Где встречается |

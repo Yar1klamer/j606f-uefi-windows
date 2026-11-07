@@ -88,7 +88,7 @@ acpi/                           ACPI: батарея по SPMI (полная и 
 windrv/                         свои драйверы Windows ARM64: hidtouch, hidbuttons, dsiprobe, j606fdsp (в работе), probe, touch, agent
 scripts/                        разбор xbl (fv_extract), Binaries/j606f (gen_binaries, patch_drivers), правки Silicium,
                                 ужатие разметки под Windows, выкладка файлов в Windows, WinPE (bcdboot), unattend.xml
-docs/                           инструкции; docs/notes/ — заметки по порту; DECISIONS.md и COMMANDS.md — решения и проверенные команды
+docs/                           инструкции по сборке, установке и драйверам; docs/notes/ — заметки по порту
 ```
 Каталог `windrv/` — рабочий: в нём есть устаревшие пробные драйверы (`touch`, `probe`), они нужны для истории.
 
