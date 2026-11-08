@@ -37,3 +37,11 @@ KeReleaseSpinLock
 ExSetTimerResolution
 ZwOpenKey
 ZwQueryValueKey
+IoReportDetectedDevice
+IoAttachDeviceToDeviceStack
+IoDetachDevice
+IoInvalidateDeviceRelations
+ObfReferenceObject
+MmGetPhysicalAddress
+MmAllocateContiguousMemorySpecifyCache
+MmFreeContiguousMemory

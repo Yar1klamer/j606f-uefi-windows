@@ -105,7 +105,11 @@
 | Тач | ✅ | `hidtouch`, перо не реализовано |
 | Кнопки | ✅ | `hidbuttons`: питание; громкость — отчёты без звука |
 | Яркость из Windows по DSI | 🚧 | доказана `dsiprobe`; слайдер — драйвер `j606fdsp` в работе |
-| USB host, Wi-Fi, BT, звук, GPU, камеры, датчики, RTC, сон, частоты CPU | ❌ | см. [windows_gpu.md](windows_gpu.md) и [windows_drivers_plan.md](windows_drivers_plan.md) |
+| Частоты CPU | ✅ | `j606fcpu`: 300 МГц ↔ 1804/2016 МГц, губернатор с тепловым пределом |
+| Bluetooth | ✅ | стек Microsoft видит устройства; сопряжение мыши не проверено |
+| ADSP (LPASS Q6) | 🚧 | запускается из Windows (READY + HANDOVER); звука и датчиков пока нет — нужен GLINK к ADSP, см. [windows_adsp.md](windows_adsp.md) |
+| Wi-Fi | ⏳ | план, не работает — см. [windows_wifi.md](windows_wifi.md) |
+| USB host, камеры, RTC, сон, GPU | ❌ | см. [windows_gpu.md](windows_gpu.md) и [windows_drivers_plan.md](windows_drivers_plan.md) |
 
 ## 7. Ожидания по подсистемам (исходная таблица, правки владельца от 07.11)
 

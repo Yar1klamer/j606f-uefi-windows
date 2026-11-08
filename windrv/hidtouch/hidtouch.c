@@ -1175,14 +1175,35 @@ static int AnyDown(void)
     return 0;
 }
 
+// C:\j606f\drv\timer.slow: keep the default timer tick (no 1 ms request) - for TrustZone tests (ADSP boot, run_54: a long SMC with
+// a 1 ms tick ends in 0x101 CLOCK_WATCHDOG_TIMEOUT). Touch then polls at the default tick.
+static int SlowTimerFlag(void)
+{
+    UNICODE_STRING u;
+    OBJECT_ATTRIBUTES a;
+    IO_STATUS_BLOCK io;
+    HANDLE f;
+
+    RtlInitUnicodeString(&u, L"\\??\\C:\\j606f\\drv\\timer.slow");
+    InitializeObjectAttributes(&a, &u, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwCreateFile(&f, 0x0001 /* FILE_READ_DATA */ | SYNCHRONIZE, &a, &io, NULL, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, 1 /* FILE_OPEN */,
+                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0)))
+        return 0;
+    ZwClose(f);
+    return 1;
+}
+
 static VOID TouchThread(PVOID ctx)
 {
     UCHAR ev[128];
     ULONG idle = 0, ticks = 0, stats = 0, quiet = 0, why, i;
 
     UNREFERENCED_PARAMETER(ctx);
-    ExSetTimerResolution(10000, TRUE);  // 1 ms, so SleepMs(2) is ~2 ms and not 15.6 ms
+    int fast = !SlowTimerFlag();
+    if (fast)
+        ExSetTimerResolution(10000, TRUE);  // 1 ms, so SleepMs(2) is ~2 ms and not 15.6 ms
     LoadMap();
+    Log("timer: %s", fast ? "1 ms" : "default (timer.slow)");
     Log("=== hidtouch thread: TouchMap %lu", (unsigned long)g_map);
     for (i = 0; i < NFING; i++)
         g_prev_down[i] = 0;
@@ -1231,7 +1252,8 @@ static VOID TouchThread(PVOID ctx)
         }
     }
 out:
-    ExSetTimerResolution(0, FALSE);
+    if (fast)
+        ExSetTimerResolution(0, FALSE);
     Log("hidtouch thread exits");
     PsTerminateSystemThread(STATUS_SUCCESS);
 }

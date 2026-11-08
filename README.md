@@ -23,6 +23,7 @@
 - [Меню выбора ОС (J606fBoot)](#меню-выбора-ос-j606fboot)
 - [Установка Windows](#установка-windows)
 - [Драйверы Windows](#драйверы-windows)
+- [Разработка без перезагрузок](#разработка-без-перезагрузок)
 - [Версии UEFI](#версии-uefi)
 - [Благодарности и лицензии](#благодарности-и-лицензии)
 
@@ -63,11 +64,14 @@
 | Кнопка питания | ✅ | свой HID-драйвер, опрос PMIC по SPMI |
 | Кнопки громкости | 🟡 | отчёты уходят в Windows; звука (аудиодрайвера) нет, индикатора громкости не будет |
 | Яркость экрана | 🚧 | яркость панели из Windows по DSI (DCS 0x51) доказана; свой дисплейный драйвер в работе, пока не запускается — см. [Драйверы Windows](#драйверы-windows) |
-| Звук, Wi-Fi, Bluetooth, GPU-ускорение | ❌ | драйверов для SM6115 в Windows нет |
+| Bluetooth | ✅ | стек Microsoft видит устройства; сопряжение мыши не проверено |
+| Частоты CPU | ✅ | служба `j606fcpu`: 300 МГц ↔ 1804/2016 МГц, губернатор с тепловым пределом |
+| Запуск ADSP | 🚧 | ADSP запускается из Windows (READY + HANDOVER); звука и датчиков пока нет |
+| Звук, датчики, Wi-Fi, GPU-ускорение | ❌ | Wi-Fi — в работе, план в [notes/windows_wifi.md](docs/notes/windows_wifi.md); драйверов GPU для SM6115 нет |
 | USB (host) | ❌ | |
 | Камеры, датчики | ❌ | |
 | Часы (RTC) | ❌ | часы Windows стоят на 2022 году |
-| Сон, частоты CPU | ❌ | |
+| Сон | ❌ | |
 
 ## Как устроено
 - **UEFI** — пакет `uefi/Platforms/Lenovo/j606fPkg` для Mu-Silicium (копия `limePkg` Redmi 9T, тот же SoC; карта памяти и набор DXE
@@ -127,9 +131,19 @@ fastboot boot Mu-j606f.img                   # только RAM, ничего н
   - В репозиторий входят только свои файлы: `j606f_bl.cxx`, `patch_kmdod.sh`, `build_dsp.sh`.
   - Пример Microsoft KMDOD (MS-PL), WDK и SDK **не входят**. Скачайте их сами: пример — из репозитория `Windows-driver-samples`, каталог `video/KMDOD`; WDK — с сайта Microsoft.
   - `patch_kmdod.sh` вставляет короткие куски в файлы примера (MS-PL), сам пример не распространяется.
+- **`cpufreq`** — частоты CPU (служба `j606fcpu`, cpufreq-hw, губернатор и тепловой предел).
+- **`rpm`**, **`btuart`**, **`btbus`** — Bluetooth: GLINK к RPM (LDO), UART3 с загрузкой прошивки WCN3990, шина BthX для стека Microsoft.
+  В `btbus` также загрузчик ADSP (`adsp.inc`) — см. [notes/windows_adsp.md](docs/notes/windows_adsp.md).
+- **`usbc`** — проба USB-C: FUSB302 и VBUS; USB host пока не работает.
+- **`scmprobe`**, **`sysprobe`** — информационные пробы SCM и системы.
 - **`probe`**, **`touch`**, **`agent`**, **`ldtest`**, **`hello`** — диагностика и служба-агент для тестов без ввода.
+- **`agent/btagent.ps1`**, **`agent/btwatch.ps1`** — связь с компьютером разработчика по Bluetooth без перезагрузок, см. [раздел ниже](#разработка-без-перезагрузок).
 
 Драйвер тача (`touch`, `hidtouch`) и кнопок — см. [лицензии](#благодарности-и-лицензии).
+
+## Разработка без перезагрузок
+Тесты драйверов не требуют перезагрузки в Linux: Windows принимает команды по Bluetooth SPP через агент `btagent.ps1`, а сторож `btwatch.ps1`
+перезапускает агент при потере связи. Подробно — [docs/DEV_WITHOUT_REBOOT.md](docs/DEV_WITHOUT_REBOOT.md).
 
 ## Версии UEFI
 
@@ -140,6 +154,7 @@ fastboot boot Mu-j606f.img                   # только RAM, ничего н
 | v5d | батарея по SPMI в AML | проверена, 98–100 % |
 | v6 | устройство тача `TSC0` (`JHMX0001`) в SSDT | тач работает |
 | v7 | карта памяти: резерв reserved-memory для GPU и ADSP Linux; меню J606fBoot | в `boot_a`, проверена |
+| v8 | SSDT с устройством дисплея (`JDSP0001`) и сборка без приложения MassStorage | только `fastboot boot`, в `boot_a` не записывалась |
 
 ## Благодарности и лицензии
 - [Project-Silicium/Mu-Silicium](https://github.com/Project-Silicium/Mu-Silicium) — UEFI для Snapdragon, платформа KamortaPkg и устройство lime; [Project Mu](https://microsoft.github.io/mu/) и [EDK II](https://github.com/tianocore/edk2).

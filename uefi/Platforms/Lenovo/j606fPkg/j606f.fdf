@@ -105,7 +105,8 @@ READ_LOCK_STATUS   = TRUE
   # USB Power
   INF KamortaPkg/Drivers/UsbPwrEnablerDxe/UsbPwrEnablerDxe.inf
 
-  !include QcomPkg/Extra.fdf.inc
+  # uefi-winarm v8: without QcomPkg MassStorage app (FVMAIN space for the SSDT display device); Silicium extras kept
+  !include SiliciumPkg/Extra.fdf.inc
 
 [FV.FVMAIN_COMPACT]
 FvAlignment        = 8
