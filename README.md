@@ -7,7 +7,7 @@
 на планшет **Lenovo Tab P11 TB-J606F** (Wi-Fi) и запуск на нём **Windows 11 ARM64**. Тот же планшет можно загрузить в [postmarketOS](https://github.com/Yar1klamer/j606f-postmarketos): UEFI-меню выбирает Windows или Linux.
 
 > ⚠️ **Статус: экспериментально.** Windows 11 Pro ARM64 (сборка 22621) ставится из установленной postmarketOS без ПК и грузится до рабочего стола.
-> Это не повседневная система. В Windows работают Wi-Fi 802.11ac, Bluetooth (звук через Bluetooth-наушники тоже), USB host (контроллер поднимается, устройства через OTG проверяются), тач, батарея и частоты CPU. Нет встроенного звука (динамики), ускорения GPU, камер и датчиков, сна. Подробнее — [STATE.md](STATE.md).
+> Это не повседневная система. В Windows работают Wi-Fi 802.11ac, Bluetooth (звук через Bluetooth-наушники тоже), USB host (мышь и клавиатура через OTG), тач, батарея, частоты CPU и яркость экрана с ползунком. Нет встроенного звука (динамики), датчиков, камер, сна и ускорения GPU. Подробнее — [STATE.md](STATE.md).
 
 **Автор порта — Yar1klamer ([@nnshould](https://t.me/nnshould), Telegram).** Вопросы — туда.
 
@@ -63,14 +63,14 @@
 | Тачскрин | ✅ | свой HID-драйвер: 10 касаний, работает и на экране входа; **перо не сделано** |
 | Кнопка питания | ✅ | свой HID-драйвер, опрос PMIC по SPMI |
 | Кнопки громкости | 🟡 | отчёты уходят в Windows; встроенного звука (динамики) нет, индикатора громкости не будет |
-| Яркость экрана | 🚧 | яркость панели из Windows по DSI (DCS 0x51) доказана; свой дисплейный драйвер в работе, пока не запускается — см. [Драйверы Windows](#драйверы-windows) |
+| Яркость экрана | ✅ | ползунок яркости Windows работает (`j606fdsp`, UEFI v8, подтвердил владелец); без 3D-ускорения |
 | Bluetooth | ✅ | стек Microsoft; звук через Bluetooth-наушники работает (подтвердил владелец) |
 | Частоты CPU | ✅ | служба `j606fcpu`: 300 МГц ↔ 1804/2016 МГц, губернатор с тепловым пределом |
 | Запуск ADSP и модема | ✅ | ADSP и модем запускаются из Windows (READY + HANDOVER); звука и датчиков пока нет |
 | Wi-Fi | ✅ | настоящий адаптер Wi-Fi: WPA2-Personal, автоподключение, 802.11ac до 80 МГц, один поток; подробно — [notes/windows_wifi.md](docs/notes/windows_wifi.md) |
 | Встроенный звук (динамики) | ❌ | звук через Bluetooth работает; встроенный звук и датчики — после GLINK к ADSP |
 | Датчики, GPU-ускорение | ❌ | датчики — после GLINK к ADSP; драйверов GPU для SM6115 нет |
-| USB (host) | ✅ | контроллер поднимается; устройства через OTG (мышь, клавиатура) проверяются |
+| USB (host) | ✅ | мышь и клавиатура через OTG; только USB 2.0; служба `j606fusbc` стартует автоматически |
 | Камеры, датчики | ❌ | |
 | Часы (RTC) | ❌ | часы Windows стоят на 2022 году |
 | Сон | ❌ | |
@@ -91,7 +91,7 @@ uefi/
   Silicium-ACPI/…/j606f/        SSDT устройства (v6: тач, устройство TSC0)
   patches/                      диагностические правки Silicium (лог в ramoops, Mass Storage без ОС)
 acpi/                           ACPI: батарея по SPMI (полная и компактная), история SSDT v4…v6
-windrv/                         свои драйверы Windows ARM64: hidtouch, hidbuttons, dsiprobe, j606fdsp (в работе), probe, touch, agent
+windrv/                         свои драйверы Windows ARM64: hidtouch, hidbuttons, dsiprobe, j606fdsp (ползунок яркости работает), probe, touch, agent
 scripts/                        разбор xbl (fv_extract), Binaries/j606f (gen_binaries, patch_drivers), правки Silicium,
                                 ужатие разметки под Windows, выкладка файлов в Windows, WinPE (bcdboot), unattend.xml
 docs/                           инструкции по сборке, установке и драйверам; docs/notes/ — заметки по порту
@@ -129,7 +129,7 @@ fastboot boot Mu-j606f.img                   # только RAM, ничего н
 - **`hidtouch`** — HID-минидрайвер тача (Touch Screen, 10 касаний) для устройства ACPI `JHMX0001`; нужна прошивка HX83102E со своего планшета (`C:\j606f\drv\hxfw.bin`).
 - **`hidbuttons`** — кнопка Питания и громкости, опрос PMIC по SPMI, HID Consumer и System Control.
 - **`dsiprobe`** — проба: яркость панели по DSI (DCS 0x51) из Windows.
-- **`j606fdsp`** — **в работе, не работает**: свой display-only драйвер (вариант KMDOD) с ползунком яркости.
+- **`j606fdsp`** — **работает**: свой display-only драйвер (вариант KMDOD) с ползунком яркости; устройство `ACPI\JDSP0001` в UEFI v8; без 3D-ускорения.
   - В репозиторий входят только свои файлы: `j606f_bl.cxx`, `patch_kmdod.sh`, `build_dsp.sh`.
   - Пример Microsoft KMDOD (MS-PL), WDK и SDK **не входят**. Скачайте их сами: пример — из репозитория `Windows-driver-samples`, каталог `video/KMDOD`; WDK — с сайта Microsoft.
   - `patch_kmdod.sh` вставляет короткие куски в файлы примера (MS-PL), сам пример не распространяется.
@@ -138,7 +138,7 @@ fastboot boot Mu-j606f.img                   # только RAM, ничего н
   В `btbus` также загрузчик ADSP (`adsp.inc`) — см. [notes/windows_adsp.md](docs/notes/windows_adsp.md).
 - **`j606fnet`** — минипорт Wi-Fi: `j606fwifi` (Native 802.11, NDIS 6.30) — настоящий адаптер Wi-Fi в Windows; `j606fnet` — прежний вариант Ethernet.
   Модем, QMI и WLAN-драйвер работают внутри `btbus` (`windrv/btbus/wlan.inc`, `wlfw.inc`, `wlnet.inc`). См. [notes/windows_wifi.md](docs/notes/windows_wifi.md).
-- **`usbc`** — проба USB-C: FUSB302 и VBUS; USB host работает, проверка устройств через OTG продолжается.
+- **`usbc`** — USB-C и USB host: FUSB302 и VBUS, служба `j606fusbc` (мышь и клавиатура через OTG, только USB 2.0).
 - **`scmprobe`**, **`sysprobe`** — информационные пробы SCM и системы.
 - **`probe`**, **`touch`**, **`agent`**, **`ldtest`**, **`hello`** — диагностика и служба-агент для тестов без ввода.
 - **`agent/btagent.ps1`**, **`agent/btwatch.ps1`** — связь с компьютером разработчика по Bluetooth без перезагрузок, см. [раздел ниже](#разработка-без-перезагрузок).
@@ -158,7 +158,7 @@ fastboot boot Mu-j606f.img                   # только RAM, ничего н
 | v5d | батарея по SPMI в AML | проверена, 98–100 % |
 | v6 | устройство тача `TSC0` (`JHMX0001`) в SSDT | тач работает |
 | v7 | карта памяти: резерв reserved-memory для GPU и ADSP Linux; меню J606fBoot | в `boot_a`, проверена |
-| v8 | SSDT с устройством дисплея (`JDSP0001`) и сборка без приложения MassStorage | только `fastboot boot`, в `boot_a` не записывалась |
+| v8 | SSDT с устройством дисплея (`JDSP0001`) и сборка без приложения MassStorage | в `boot_a` (09.11), проверена |
 
 ## Благодарности и лицензии
 - [Project-Silicium/Mu-Silicium](https://github.com/Project-Silicium/Mu-Silicium) — UEFI для Snapdragon, платформа KamortaPkg и устройство lime; [Project Mu](https://microsoft.github.io/mu/) и [EDK II](https://github.com/tianocore/edk2).

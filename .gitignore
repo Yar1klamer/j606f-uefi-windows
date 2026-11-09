@@ -23,3 +23,5 @@ Binaries/
 *.log
 __pycache__/
 .DS_Store
+# Wi-Fi calibration data from the device (never published)
+bdwlan*

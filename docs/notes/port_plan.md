@@ -104,19 +104,20 @@
 | Зарядка | ✅ | `EnableChargerWdog = 0` |
 | Тач | ✅ | `hidtouch`, перо не реализовано |
 | Кнопки | ✅ | `hidbuttons`: питание; громкость — отчёты без звука |
-| Яркость из Windows по DSI | 🚧 | доказана `dsiprobe`; слайдер — драйвер `j606fdsp` в работе |
+| Яркость экрана | ✅ | ползунок яркости Windows работает через драйвер `j606fdsp` (UEFI v8), подтвердил владелец |
 | Частоты CPU | ✅ | `j606fcpu`: 300 МГц ↔ 1804/2016 МГц, губернатор с тепловым пределом |
 | Bluetooth | ✅ | стек Microsoft видит устройства; сопряжение мыши проверено (подтвердил владелец) |
 | ADSP (LPASS Q6) | 🚧 | запускается из Windows (READY + HANDOVER); звука и датчиков пока нет — нужен GLINK к ADSP, см. [windows_adsp.md](windows_adsp.md) |
 | Wi-Fi | ✅ | настоящий адаптер Wi-Fi в Windows, WPA2-Personal, автоподключение, 802.11ac — см. [windows_wifi.md](windows_wifi.md) |
-| USB host, камеры, RTC, сон, GPU | ❌ | см. [windows_gpu.md](windows_gpu.md) и [windows_drivers_plan.md](windows_drivers_plan.md) |
+| USB host | ✅ | мышь и клавиатура через OTG, только USB 2.0 |
+| Камеры, RTC, сон, GPU | ❌ | см. [windows_gpu.md](windows_gpu.md) и [windows_drivers_plan.md](windows_drivers_plan.md) |
 
 ## 7. Ожидания по подсистемам (исходная таблица, правки владельца от 07.11)
 
 | Подсистема | Ожидание | Почему |
 |---|---|---|
 | Загрузка, UFS | ✅ (как у lime/caprip) | UFS0 в DSDT Kamorta |
-| Экран | ✅ только базовый framebuffer (Microsoft Basic Display), 1200x2000, портрет; поворот вручную; яркость пока не регулируется (слайдер в работе, драйвер `j606fdsp` даёт код 43) | драйвера Adreno 610/MDSS для Windows нет |
+| Экран | ✅ только базовый framebuffer (Microsoft Basic Display), 1200x2000, портрет; поворот вручную; яркость регулируется (ползунок подтверждён владельцем, 10.11) | драйвера Adreno 610/MDSS для Windows нет |
 | CPU | ⚠ 4–8 ядер, частота не управляется (как оставил загрузчик) — медленно | нет PEP/драйверов питания SM6115 |
 | USB-C host (клавиатура, мышь, флешка, USB-Ethernet) | ❔ у lime работает; у J606F VBUS дают FUSB302+буст gpio38 — может понадобиться хаб с питанием | URS0 в DSDT, но без драйвера Type-C |
 | Тач (Himax HX83102E, SPI, zero-flash) | ✅ | полноценно работает |

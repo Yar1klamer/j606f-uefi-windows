@@ -49,16 +49,12 @@ qcdx, qcpep, qcsmmu и прочие пакеты — проприетарные 
 
 Выбран вариант **A** (решение владельца от 07.11): ползунок яркости в Windows.
 
-## 6. Состояние варианта A
-- Яркость по DSI из Windows доказана (`dsiprobe`: значения 4095, 600, 100, 2000; изображение не пропадает).
+## 6. Состояние варианта A (10.11)
+- Яркость по DSI из Windows доказана (`dsiprobe`): уровни переключаются, изображение не пропадает.
 - Свой драйвер `j606fdsp` — на основе примера Microsoft KMDOD (MS-PL). Свои файлы — `j606f_bl.cxx` (интерфейс яркости и DSI),
   `patch_kmdod.sh` (вставки в пример), `build_dsp.sh` (сборка). Пример и WDK на машину сборки не выкладываются.
-- `StartDevice` с пустым POST-дисплеем не проходит. Резервный путь — кадровый буфер UEFI `0x5C000000`,
-  1200×2000, pitch 4800: с ним `StartDevice` проходит.
-- После этого Windows помечает адаптер кодом **43** (`CM_PROB_FAILED_POST_START`), ползунок не работает.
-- Следующий шаг — журнал всех DDI (`QueryAdapterInfo`, `QueryChildRelations/Status`, `EnumVidPnCofuncModality`, `CommitVidPn`,
-  `SetVidPnSourceVisibility`, `SetPowerState`) и проверка отображения `0x5C000000` в карте памяти UEFI.
-- Если не получится — запасной вариант (подмена `ImagePath` службы `BasicDisplay`) только с отдельного решения владельца.
+- Устройство дисплея — ACPI `JDSP0001` в UEFI v8. Драйвер выводит рабочий стол на встроенной панели, ползунок яркости работает (подтвердил владелец).
+- Ограничение: 3D по-прежнему через WARP, аппаратного ускорения GPU нет.
 
 ## 7. Источники
 - Qualcomm, драйвер Adreno для Windows (только Snapdragon X): https://softwarecenter.qualcomm.com/catalog/item/Windows_Graphics_Driver

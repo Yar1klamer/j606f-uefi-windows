@@ -16,3 +16,23 @@ grep -q "J606F ddi log" bdd_ddi.cxx || perl -0pi -e '
   s{\n    return pBDD->((?!InterruptRoutine|SetPointer|PresentDisplayOnly|QueryAdapterInfo|SystemDisplay)\w+)\((.*?)\);}{\n    { /* J606F ddi log */ NTSTATUS s_ = pBDD->$1($2); J606fLog("ddi $1 %08lx", (ULONG)s_); return s_; }}g;
 ' bdd_ddi.cxx
 grep -c "J606F ddi log" bdd_ddi.cxx
+# v4: an internal panel must be HpdAwarenessAlwaysConnected (run_26: StartDevice OK, QueryChildRelations OK, then dxgkrnl StopDevice → code 43)
+grep -q "J606F always connected" bdd.cxx || perl -pi -e 's/(ChildCapabilities\.HpdAwareness = )HpdAwarenessInterruptible;/${1}HpdAwarenessAlwaysConnected;  \/\/ J606F always connected (internal panel)/' bdd.cxx
+grep -c "J606F always connected" bdd.cxx
+# v5: output type and HPD selectable for experiments: J606F_VOT=INTERNAL|OTHER (default OTHER, as the sample on a non-internal POST display),
+# J606F_HPD=AlwaysConnected|Interruptible (default Interruptible). run_27: INTERNAL + AlwaysConnected → still StopDevice after QueryChildRelations.
+VOT=${J606F_VOT:-OTHER}
+HPD=${J606F_HPD:-Interruptible}
+perl -pi -e "s/(VideoOutput\.InterfaceTechnology = )D3DKMDT_VOT_\w+;.*\$/\${1}D3DKMDT_VOT_$VOT;  \/\/ J606F: internal panel (brightness slider) — J606F_VOT/; s/(ChildCapabilities\.HpdAwareness = )HpdAwareness\w+;.*\$/\${1}HpdAwareness$HPD;  \/\/ J606F always connected (internal panel) — J606F_HPD/" bdd.cxx
+grep -n "J606F_VOT\|J606F_HPD" bdd.cxx | cut -c1-140
+# v6: always synchronous present. The sample alternates sync/async; async completion is reported through DxgkCbSynchronizeExecution
+# (a fake interrupt), but a root device has no interrupt → the present never completes → dxgkrnl stops the adapter (run_28: Present 103, StopDevice).
+grep -q "J606F synchronous present" blthw.cxx || perl -pi -e 's/^(\s*)m_SynchExecution = !m_SynchExecution;/${1}m_SynchExecution = TRUE;  \/\/ J606F synchronous present (no interrupt on a root device)/' blthw.cxx
+grep -c "J606F synchronous present" blthw.cxx
+# v7: log the resources PnP gave the adapter (run_31 forces Memory 0x5C000000 via Enum\...\LogConf\ForcedConfig)
+grep -q "J606F resources" bdd.cxx || perl -0pi -e 's/(    J606fLog\("StartDevice: enter"\);\n)/$1    { \/\/ J606F resources\n        PCM_RESOURCE_LIST r = m_DeviceInfo.TranslatedResourceList;\n        if (r && r->Count) {\n            PCM_PARTIAL_RESOURCE_LIST p = &r->List[0].PartialResourceList;\n            J606fLog("StartDevice: %lu resources", p->Count);\n            for (ULONG i = 0; i < p->Count && i < 4; i++)\n                J606fLog("  res %lu type %u start %llx len %lx", i, (UINT)p->PartialDescriptors[i].Type, (ULONGLONG)p->PartialDescriptors[i].u.Memory.Start.QuadPart, p->PartialDescriptors[i].u.Memory.Length);\n        } else J606fLog("StartDevice: no resources");\n    }\n/' bdd.cxx
+grep -c "J606F resources" bdd.cxx
+# v8: child AcpiUid selectable (J606F_ACPIUID, default 0). With UEFI v8 the adapter is ACPI\JDSP0001 (\_SB.DSP0, _DOD 0x80010400, LCD0 _ADR 0x400).
+UID=${J606F_ACPIUID:-0}
+perl -pi -e "s/^(\s*pChildRelations\[ChildIndex\]\.AcpiUid = )\S+;.*\$/\${1}$UID;  \/\/ J606F_ACPIUID/" bdd.cxx
+grep -n "J606F_ACPIUID" bdd.cxx | cut -c1-110

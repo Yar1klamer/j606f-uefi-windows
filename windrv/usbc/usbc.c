@@ -412,7 +412,7 @@ static void VbusSet(int on)
 enum { ST_TOGGLE, ST_SRC_DEB, ST_SRC, ST_SNK };
 static volatile LONG g_stop;
 static PVOID g_thread;
-static int g_state, g_cc;
+static int g_state, g_cc, vbwait;
 
 static void StartToggling(void)
 {
@@ -481,7 +481,10 @@ static VOID UsbcThread(PVOID ctx)
             if (s0 & 0x20) {                    // COMP high: no Rd any more
                 Log("SRC debounce: Rd lost");
                 StartToggling();
-            } else if (++deb >= 4) {            // 200 ms
+            } else if (++deb >= 4 && (s0 & 0x80) && ++vbwait < 40) {
+                ;                               // our own VBUS may still be decaying after a detach: wait up to 2 s
+            } else if (deb >= 4) {              // 200 ms
+                vbwait = 0;
                 if (s0 & 0x80) {
                     Log("SRC: foreign VBUS present (vbusok=1, usbin %d) - boost NOT enabled", UsbinPlugged());
                     g_state = ST_SRC;          // keep Rp, track detach, no VBUS from us
