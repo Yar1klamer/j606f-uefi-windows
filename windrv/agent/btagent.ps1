@@ -101,12 +101,21 @@ function Serve($sp) {
         if ($line.StartsWith('PUT ') -or $line.StartsWith('PUTA ')) {
             $append = $line.StartsWith('PUTA '); $a = $line.Substring($line.IndexOf(' ') + 1); $i = $a.LastIndexOf(' '); $path = $a.Substring(0, $i); $n = [int]$a.Substring($i + 1)
             L "put: $path ($n)"
+            # bulk read (08.11): ReadExisting + heartbeat at most once a second instead of ReadLine + a file write per 76-char line
             $sb = New-Object System.Text.StringBuilder
-            $quiet = 0; $ok = $false
-            while ($quiet -lt 30) {                     # 30 s without data -> give up (was an endless wait, 08.11)
-                try { $l = $sp.ReadLine().TrimEnd("`r"); $quiet = 0; Beat 'rx' } catch [System.TimeoutException] { $quiet += 2; continue } catch { L "put read error: $_"; return }
-                if ($l -eq '.') { $ok = $true; break }
-                [void]$sb.Append($l)
+            $quiet = 0; $ok = $false; $lastBeat = [DateTime]::MinValue
+            while ($quiet -lt 300) {                    # 30 s without data -> give up (was an endless wait, 08.11)
+                try { $chunk = $sp.ReadExisting() } catch { L "put read error: $_"; return }
+                if ($chunk.Length -eq 0) { Start-Sleep -Milliseconds 100; $quiet++; continue }
+                $quiet = 0
+                [void]$sb.Append($chunk)
+                if (([DateTime]::Now - $lastBeat).TotalSeconds -ge 1) { Beat 'rx'; $lastBeat = [DateTime]::Now }
+                $n2 = $sb.Length
+                if ($n2 -ge 2 -and $sb.ToString([Math]::Max(0, $n2 - 3), [Math]::Min(3, $n2)) -match "(^|\n)\.\r?\n$") { $ok = $true; break }
+            }
+            if ($ok) {
+                $t = $sb.ToString(); $t = $t.Substring(0, $t.LastIndexOf('.'))
+                $sb = New-Object System.Text.StringBuilder; [void]$sb.Append(($t -replace "[\r\n]", ''))
             }
             if (-not $ok) { L "put: no data for 30 s, aborted ($($sb.Length) chars)"; Send $sp "put aborted: no data for 30 s"; Done $sp -1; continue }
             try {
@@ -121,7 +130,12 @@ function Serve($sp) {
             $path = $line.Substring(4); L "get: $path"
             try {
                 $b = [IO.File]::ReadAllBytes($path); $s = [Convert]::ToBase64String($b)
-                for ($o = 0; $o -lt $s.Length; $o += 76) { Send $sp ($s.Substring($o, [Math]::Min(76, $s.Length - $o)) + "`n") }
+                $w = New-Object System.Text.StringBuilder
+                for ($o = 0; $o -lt $s.Length; $o += 76) {
+                    [void]$w.Append($s.Substring($o, [Math]::Min(76, $s.Length - $o))).Append("`n")
+                    if ($w.Length -ge 16384) { $sp.Write($w.ToString()); [void]$w.Clear(); Beat 'busy' }   # blocks of 16 KiB (08.11)
+                }
+                if ($w.Length) { $sp.Write($w.ToString()) }
                 Done $sp $b.Length
             } catch { Send $sp "ERROR: $_"; Done $sp -1 }
             continue
@@ -138,6 +152,7 @@ while ($true) {
     $ports = [System.IO.Ports.SerialPort]::GetPortNames()
     foreach ($n in $ports) {
         $sp = New-Object System.IO.Ports.SerialPort $n, 115200
+        $sp.ReadBufferSize = 4194304; $sp.WriteBufferSize = 1048576        # 08.11: default 4 KiB lost data at 3 Mbps
         $sp.NewLine = "`n"; $sp.ReadTimeout = 2000; $sp.WriteTimeout = 20000; $sp.Encoding = New-Object System.Text.UTF8Encoding $false
         try { $sp.Open() } catch { if (-not $failed[$n]) { L "open $n failed: $($_.Exception.Message)"; $failed[$n] = 1 }; continue }
         $failed[$n] = 0

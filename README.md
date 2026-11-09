@@ -66,8 +66,9 @@
 | Яркость экрана | 🚧 | яркость панели из Windows по DSI (DCS 0x51) доказана; свой дисплейный драйвер в работе, пока не запускается — см. [Драйверы Windows](#драйверы-windows) |
 | Bluetooth | ✅ | стек Microsoft видит устройства; сопряжение мыши не проверено |
 | Частоты CPU | ✅ | служба `j606fcpu`: 300 МГц ↔ 1804/2016 МГц, губернатор с тепловым пределом |
-| Запуск ADSP | 🚧 | ADSP запускается из Windows (READY + HANDOVER); звука и датчиков пока нет |
-| Звук, датчики, Wi-Fi, GPU-ускорение | ❌ | Wi-Fi — в работе, план в [notes/windows_wifi.md](docs/notes/windows_wifi.md); драйверов GPU для SM6115 нет |
+| Запуск ADSP и модема | ✅ | ADSP и модем запускаются из Windows (READY + HANDOVER); звука и датчиков пока нет |
+| Wi-Fi | ✅ | настоящий адаптер Wi-Fi: WPA2-Personal, автоподключение, 802.11ac до 80 МГц, один поток; подробно — [notes/windows_wifi.md](docs/notes/windows_wifi.md) |
+| Звук, датчики, GPU-ускорение | ❌ | звук и датчики — после GLINK к ADSP; драйверов GPU для SM6115 нет |
 | USB (host) | ❌ | |
 | Камеры, датчики | ❌ | |
 | Часы (RTC) | ❌ | часы Windows стоят на 2022 году |
@@ -134,6 +135,8 @@ fastboot boot Mu-j606f.img                   # только RAM, ничего н
 - **`cpufreq`** — частоты CPU (служба `j606fcpu`, cpufreq-hw, губернатор и тепловой предел).
 - **`rpm`**, **`btuart`**, **`btbus`** — Bluetooth: GLINK к RPM (LDO), UART3 с загрузкой прошивки WCN3990, шина BthX для стека Microsoft.
   В `btbus` также загрузчик ADSP (`adsp.inc`) — см. [notes/windows_adsp.md](docs/notes/windows_adsp.md).
+- **`j606fnet`** — минипорт Wi-Fi: `j606fwifi` (Native 802.11, NDIS 6.30) — настоящий адаптер Wi-Fi в Windows; `j606fnet` — прежний вариант Ethernet.
+  Модем, QMI и WLAN-драйвер работают внутри `btbus` (`windrv/btbus/wlan.inc`, `wlfw.inc`, `wlnet.inc`). См. [notes/windows_wifi.md](docs/notes/windows_wifi.md).
 - **`usbc`** — проба USB-C: FUSB302 и VBUS; USB host пока не работает.
 - **`scmprobe`**, **`sysprobe`** — информационные пробы SCM и системы.
 - **`probe`**, **`touch`**, **`agent`**, **`ldtest`**, **`hello`** — диагностика и служба-агент для тестов без ввода.

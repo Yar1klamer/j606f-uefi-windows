@@ -108,7 +108,7 @@
 | Частоты CPU | ✅ | `j606fcpu`: 300 МГц ↔ 1804/2016 МГц, губернатор с тепловым пределом |
 | Bluetooth | ✅ | стек Microsoft видит устройства; сопряжение мыши не проверено |
 | ADSP (LPASS Q6) | 🚧 | запускается из Windows (READY + HANDOVER); звука и датчиков пока нет — нужен GLINK к ADSP, см. [windows_adsp.md](windows_adsp.md) |
-| Wi-Fi | ⏳ | план, не работает — см. [windows_wifi.md](windows_wifi.md) |
+| Wi-Fi | ✅ | настоящий адаптер Wi-Fi в Windows, WPA2-Personal, автоподключение, 802.11ac — см. [windows_wifi.md](windows_wifi.md) |
 | USB host, камеры, RTC, сон, GPU | ❌ | см. [windows_gpu.md](windows_gpu.md) и [windows_drivers_plan.md](windows_drivers_plan.md) |
 
 ## 7. Ожидания по подсистемам (исходная таблица, правки владельца от 07.11)
@@ -121,7 +121,7 @@
 | USB-C host (клавиатура, мышь, флешка, USB-Ethernet) | ❔ у lime работает; у J606F VBUS дают FUSB302+буст gpio38 — может понадобиться хаб с питанием | URS0 в DSDT, но без драйвера Type-C |
 | Тач (Himax HX83102E, SPI, zero-flash) | ✅ | полноценно работает |
 | Клавиатура Keyboard Pack (I2C-HID) | ❌ | нет драйвера I2C (QUP) SM6115 |
-| Wi-Fi / BT (WCN3990 через модем) | Wi-Fi ❌, BT ✅ | Bluetooth работает (стек Microsoft); Wi-Fi требует модем (PIL) и WLAN-драйвер, план в windows_wifi.md |
+| Wi-Fi / BT (WCN3990 через модем) | Wi-Fi ✅, BT ✅ | Bluetooth работает (стек Microsoft); Wi-Fi работает через модем: см. windows_wifi.md |
 | GPU | ❌ (программная отрисовка) | Adreno 610 — драйвера нет |
 | Звук, датчики, камеры | ❌ | |
 | Батарея / зарядка / уровень заряда | ✅ работает | |

@@ -44,6 +44,7 @@ static const RPROC g_adsp = { "adsp", 1, 0x53800000u, 0x02800000u, L"\\??\\C:\\j
 static const RPROC g_mpss = { "mpss", 4, 0x4ab00000u, 0x06900000u, L"\\??\\C:\\j606f\\drv\\modem.mbn", L"\\??\\C:\\j606f\\drv\\mpss.arm",
                               1, 435, 428, 14, { RES_RWCX, 0 }, { "cx", NULL } };
 static const RPROC *g_rp = &g_adsp;
+static const RPROC *g_rproc_up;                    // last remote processor that reported READY
 
 typedef unsigned long long U64;
 
@@ -607,7 +608,9 @@ static void RprocBoot(const RPROC *rp)
             Log("adsp: smp2p out: %08lx %08lx %08lx %08lx", (unsigned long)ARd(g_out + 4), (unsigned long)ARd(g_out + 8),
                 (unsigned long)ARd(g_out + 12), (unsigned long)ARd(g_out + 16));
     }
-    Log("adsp: %s (votes kept)", (v != ~0u && (v & 2)) ? "ADSP UP" : "no ready bit in 10 s (ADSP left running as is)");
+    Log("adsp: %s (votes kept)", (v != ~0u && (v & 2)) ? "UP" : "no ready bit in 10 s (left running as is)");
+    if (v != ~0u && (v & 2))
+        g_rproc_up = rp;
     goto out;
 
 shutdown:

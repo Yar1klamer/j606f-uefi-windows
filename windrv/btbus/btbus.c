@@ -89,7 +89,8 @@ static volatile LONG g_hw_ready, g_child_present, g_started;
 static ULONG g_acl_max = 1024;
 static int g_adsp_tried, g_mpss_tried;
 static LONGLONG g_adsp_chk;
-static int g_auto, g_boot_cleared;
+static int g_auto, g_boot_cleared, g_fast_ok;
+static int FileExists(const WCHAR *path);
 
 // ---- request and packet queues (g_lock) ---------------------------------------------------------------------------------------------
 static KSPIN_LOCK g_lock;
@@ -428,7 +429,39 @@ static void ParseRx(void)
     }
 }
 
-static int HwInit(void)
+// hci_qca qca_set_speed(QCA_OPER_SPEED) for WCN3990: RTS off, vendor 0xFC48 [baud index] at the old speed, host to the new speed, RTS on,
+// the controller's vendor event at the new speed is dropped; then EDL version must answer at the new speed (else -> caller falls back).
+static int FastBaud(void)
+{
+    static const UCHAR setb[] = { 0x01, 0x48, 0xfc, 0x01, 14 };   // QCA_BAUDRATE_3000000
+    static const UCHAR edl_ver[] = { 0x19 };
+    UCHAR ev[64];
+    ULONG n;
+    int ok = 0, i;
+
+    Wr(g_se, SE_UART_MANUAL_RFR, (1u << 31) | (1u << 1));        // RFR not ready
+    UartTx(setb, sizeof(setb));
+    SleepMs(10);
+    if (SetSeClk(g_sampling == 16 ? 4 : 8, 25, g_sampling == 16 ? 48000000 : 96000000))
+        return -1;
+    SetBaud(3000000);
+    Wr(g_se, SE_UART_MANUAL_RFR, (1u << 31) | 1u);               // RFR ready
+    n = GetEvent(ev, sizeof(ev), 200);
+    Log("3M: baud event %lu bytes %02x %02x %02x", (unsigned long)n, ev[0], n > 1 ? ev[1] : 0, n > 2 ? ev[2] : 0);
+    for (i = 0; i < 3 && !ok; i++) {
+        if (SendCmd(0xfc00, edl_ver, 1))
+            continue;
+        n = GetEvent(ev, sizeof(ev), 300);
+        if (n && (ev[0] == 0xff || ev[0] == 0x0e))
+            ok = 1;
+        Log("3M: EDL version try %d: %lu bytes ev %02x", i, (unsigned long)n, n ? ev[0] : 0);
+        while (GetEvent(ev, sizeof(ev), 50))
+            ;
+    }
+    return ok ? 0 : -1;
+}
+
+static int HwInit(int fast)
 {
     static const UCHAR edl_ver[] = { 0x19 };
     UCHAR ev[64], buf[64];
@@ -463,6 +496,15 @@ static int HwInit(void)
     if (!(ios & 2))
         Wr(g_se, SE_UART_TX_TRANS_CFG, 0);
     Cmd(0xfc00, edl_ver, 1, "EDL patch version", ev, sizeof(ev), 300);   // answered by VSE + CC with opcode 0 (run_43)
+    g_nvm_baud = 0;
+    if (fast) {
+        if (FastBaud()) {
+            Log("3M: no answer at 3 Mbps -> fallback to 115200");
+            return -2;
+        }
+        g_nvm_baud = 14;
+        Log("3M: controller answers at 3 Mbps");
+    }
     if (Download(L"\\??\\C:\\j606f\\drv\\crbtfw21.tlv", "rampatch", 0))
         return -1;
     SleepMs(10);
@@ -485,7 +527,15 @@ static int HwInit(void)
 }
 
 static int FileOp(const WCHAR *path, int create);
+#ifndef FILE_READ_ATTRIBUTES
+#define FILE_READ_ATTRIBUTES 0x0080
+#endif
+static int MpssAuto(void);
+static int FileThere(const WCHAR *path);
+static LONGLONG g_mpss_marker;
 #include "adsp.inc"
+#include "usbphy.inc"
+#include "glinkm.inc"
 
 static VOID HwThread(PVOID ctx)
 {
@@ -494,7 +544,25 @@ static VOID HwThread(PVOID ctx)
 
     UNREFERENCED_PARAMETER(ctx);
     ExSetTimerResolution(10000, TRUE);
-    if (HwInit()) {
+    {
+        // C:\j606f\drv\bt3m.on -> UART 3 Mbps (08.11; at 115200 the BT link gave ~3.7 KB/s). Any failure -> power cycle, 115200 as before.
+        int fast = FileExists(L"\\??\\C:\\j606f\\drv\\bt3m.on"), r = HwInit(fast);
+        if (r && fast) {
+            Log("3M failed (%d): power cycle, 115200", r);
+            Wr(g_se, SE_UART_MANUAL_RFR, (1u << 31) | 1u);
+            RxStop();
+            SetBaud(2400);      // still at the SE clock FastBaud left -> ClocksOn in HwInit restores 7.3728 MHz
+            LdosOff();
+            SleepMs(200);
+            g_rn = 0;
+            r = HwInit(0);
+        }
+        g_fast_ok = fast && !r;
+        if (r)
+            goto fail;
+    }
+    if (0) {
+fail:
         Log("hw init FAILED, no child device");
         goto out;
     }
@@ -554,6 +622,17 @@ static VOID HwThread(PVOID ctx)
                 busy = 1;
         }
         ParseRx();
+        GmService();
+        {
+            static ULONG wl_seen;
+            static LONGLONG wl_last;
+            if (g_wl_work != wl_seen) {                 // Wi-Fi traffic: poll without the 1 ms sleep, back to sleeping 3 ms after it stops
+                wl_seen = g_wl_work;
+                wl_last = NowUs();
+            }
+            if (wl_last && NowUs() - wl_last < 3000)
+                busy = 1;
+        }
         if (g_tr_r != g_tr_w) {
             if (g_auto)
                 g_tr_r = g_tr_w;
@@ -564,22 +643,37 @@ static VOID HwThread(PVOID ctx)
             g_boot_cleared = 1;
             Log("10 s up: btbus.boot %s", FileOp(L"\\??\\C:\\j606f\\drv\\btbus.boot", 0) ? "deleted" : "NOT deleted");
         }
-        if ((!g_auto || g_boot_cleared) && (!g_adsp_tried || !g_mpss_tried) && NowUs() - g_adsp_chk > 5000000) {
+        if ((!g_auto || g_boot_cleared) && (!g_adsp_tried || !g_mpss_tried || !g_usbphy_tried) && NowUs() - g_adsp_chk > 5000000) {
             g_adsp_chk = NowUs();
             if (!g_adsp_tried && RprocArmed(&g_adsp)) {
                 g_adsp_tried = 1;
                 RprocBoot(&g_adsp);
             }
-            if (!g_mpss_tried && RprocArmed(&g_mpss)) {
+            if (!g_mpss_tried && (RprocArmed(&g_mpss) || MpssAuto())) {
                 g_mpss_tried = 1;
                 RprocBoot(&g_mpss);
+                if (g_rproc_up == &g_mpss) {
+                    g_rp = &g_mpss;
+                    GmStart();
+                }
             }
+            if (!g_usbphy_tried && FileOp(L"\\??\\C:\\j606f\\drv\\usbphy.arm", 0)) {
+                g_usbphy_tried = 1;
+                UsbPhyInit();
+            }
+        }
+        if (g_mpss_marker && NowUs() - g_mpss_marker > 300000000) {     // the risky start-up phase is over: no skip on the next boot
+            g_mpss_marker = 0;
+            FileOp(L"\\??\\C:\\j606f\\drv\\mpss.try", 0);
+            Log("mpss autostart: survived 5 min, marker cleared");
         }
         if (NowUs() - last > 30000000) {
             last = NowUs();
-            Log("stats: cmd %ld aclw %ld ev %ld aclr %ld rdq %ld drop %ld bad %ld lost %lu junk %lu", (long)g_cnt_cmd, (long)g_cnt_aclw,
+            Log("stats%s: cmd %ld aclw %ld ev %ld aclr %ld rdq %ld drop %ld bad %ld lost %lu junk %lu", g_fast_ok ? " 3M" : "", (long)g_cnt_cmd, (long)g_cnt_aclw,
                 (long)g_cnt_ev, (long)g_cnt_aclr, (long)g_cnt_rdq, (long)g_cnt_drop, (long)g_cnt_bad, (unsigned long)g_lost,
                 (unsigned long)g_junk);
+            if (g_usbphy_tried)
+                XhciPorts("stats");
         }
         if (!busy)
             SleepMs(1);
@@ -931,6 +1025,48 @@ static int FileOp(const WCHAR *path, int create)       // create: FILE_CREATE; e
                                  FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE | (create ? 0 : FILE_DELETE_ON_CLOSE), NULL, 0)))
         return 0;
     ZwClose(f);
+    return 1;
+}
+
+static int FileThere(const WCHAR *path)
+{
+    UNICODE_STRING u;
+    OBJECT_ATTRIBUTES a;
+    IO_STATUS_BLOCK io;
+    HANDLE f;
+
+    RtlInitUnicodeString(&u, path);
+    InitializeObjectAttributes(&a, &u, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwCreateFile(&f, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &a, &io, NULL, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_OPEN,
+                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0)))
+        return 0;
+    ZwClose(f);
+    return 1;
+}
+
+// Modem autostart: C:\\j606f\\drv\\mpss.on (kept) instead of the one-shot mpss.arm. mpss.try marks a start in progress: when it is still there at the next
+// boot the previous start did not survive 5 min, so this boot skips the modem (and drops the marker): a modem start that crashes cannot become a boot loop.
+static int MpssAuto(void)
+{
+    UNICODE_STRING u;
+    OBJECT_ATTRIBUTES a;
+    IO_STATUS_BLOCK io;
+    HANDLE f;
+
+    RtlInitUnicodeString(&u, L"\\??\\C:\\j606f\\drv\\mpss.on");
+    InitializeObjectAttributes(&a, &u, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwCreateFile(&f, FILE_READ_ATTRIBUTES | SYNCHRONIZE, &a, &io, NULL, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_OPEN,
+                                 FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE, NULL, 0)))
+        return 0;
+    ZwClose(f);
+    if (FileOp(L"\\??\\C:\\j606f\\drv\\mpss.try", 0)) {
+        g_mpss_tried = 1;
+        Log("mpss autostart: previous start did not finish, skipping the modem this boot");
+        return 0;
+    }
+    FileOp(L"\\??\\C:\\j606f\\drv\\mpss.try", 1);
+    g_mpss_marker = NowUs();
+    Log("mpss autostart: starting the modem");
     return 1;
 }
 

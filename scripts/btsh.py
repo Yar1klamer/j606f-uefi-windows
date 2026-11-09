@@ -227,7 +227,7 @@ def main():
     if a[0] == 'put':
         # 256 KiB pieces: PUT for the first, PUTA (append) for the rest; a piece is written only when complete, so a failed piece is resent
         b = open(a[1], 'rb').read()
-        piece = 256 * 1024
+        piece = int(os.environ.get('J606F_PIECE', 256 * 1024))
         for off in range(0, max(len(b), 1), piece):
             part = b[off:off + piece]
             s = base64.b64encode(part).decode()

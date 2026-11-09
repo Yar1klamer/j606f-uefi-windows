@@ -130,10 +130,10 @@ Windows сопоставляет его с действием кнопки пи�
 | Bluetooth (`windrv/rpm`, `windrv/btuart`, `windrv/btbus`) | `rpm`: GLINK к RPM, включение LDO BT. `btuart`: UART3 через GENI, загрузка прошивки WCN3990 по схеме btqca. `btbus`: шина BthX (`ROOT\J606FBT\0000` → дочернее устройство `J606F\WCN3990_UART`) под стеком Microsoft | ✅ стек видит устройства; сопряжение мыши не проверено, UART 115200 |
 | Связь Windows ⇄ компьютер | `btagent.ps1` и `btwatch.ps1` через Bluetooth SPP, мост на одноплатном компьютере (`scripts/pi_btbridge.py`), клиент `scripts/btsh.py` | ✅ без перезагрузок; подробно — [DEV_WITHOUT_REBOOT.md](../DEV_WITHOUT_REBOOT.md) |
 | ADSP (LPASS Q6) | `btbus/adsp.inc`: RPM-голоса, PAS через SCM с продолжением прерванных вызовов, SMEM и SMP2P, пинок APCS | ✅ READY + HANDOVER; GLINK к ADSP — нет |
-| Wi-Fi | MPSS (PAS id 4), rmtfs, QMI WLFW и WLAN | ⏳ следующий шаг по решению владельца; план — [windows_wifi.md](windows_wifi.md) |
+| Wi-Fi (`windrv/btbus`, `windrv/j606fnet`) | модем (PAS id 4), rmtfs, pd-mapper, QMI WLFW, CE/HTC/WMI, минипорт Native 802.11 | ✅ WPA2-Personal, автоподключение, 802.11ac до 80 МГц; подробно — [windows_wifi.md](windows_wifi.md) |
 | USB host | `windrv/usbc`: FUSB302 и VBUS работают; xHCI не видит устройств, PHY QUSB2 не инициализирован | ⏸ отложено владельцем |
 | Дисплей с ползунком | `j606fdsp` выводит рабочий стол на внешнем мониторе; на встроенной панели код 43, ползунок не работает | ⏸ отложено владельцем |
-| Звук, датчики | нужен GLINK к ADSP и APR/GPR/SSC | после Wi-Fi |
+| Звук, датчики | нужен GLINK к ADSP и APR/GPR/SSC (GLINK к модему уже работает) | ⏳ следующий шаг |
 | Сон, камеры, GPU, RTC, перо | — | нет |
 
 Подробно про запуск ADSP — [windows_adsp.md](windows_adsp.md). Проба SCM (`windrv/scmprobe`) — только чтение информации о доступных PAS-процессорах.

@@ -80,13 +80,15 @@
 #define SE_DMA_GENERAL_CFG      0xe30
 
 static volatile UCHAR *g_gcc, *g_se, *g_pin[4];
-static ULONG g_sampling = 32, g_rx_depth = 16;
+static ULONG g_sampling = 32, g_rx_depth = 16, g_clk = 7372800;
+static UCHAR g_nvm_baud;                                  // NVM tag 17 data[2]: QCA baud index the controller uses after NVM (0 = 115200, 14 = 3000000)
 static int g_uart_ok;
+
+static int SetSeClk(ULONG m, ULONG n, ULONG hz);
 
 static int ClocksOn(void)
 {
     int i;
-    ULONG cfg;
 
     Wr(g_gcc, VOTE, Rd(g_gcc, VOTE) | VOTE_BITS);
     for (i = 0; i < 100; i++) {
@@ -101,29 +103,42 @@ static int ClocksOn(void)
     // RCGR: CMD +0, CFG +4, M +8, N +c, D +10
     Log("s3 rcgr before: cmd %08lx cfg %08lx m %08lx n %08lx d %08lx", (unsigned long)Rd(g_gcc, S3_RCGR), (unsigned long)Rd(g_gcc, S3_RCGR + 4),
         (unsigned long)Rd(g_gcc, S3_RCGR + 8), (unsigned long)Rd(g_gcc, S3_RCGR + 0xc), (unsigned long)Rd(g_gcc, S3_RCGR + 0x10));
-    Wr(g_gcc, S3_RCGR + 8, 0x180);
-    Wr(g_gcc, S3_RCGR + 0xc, 0xc476);
-    Wr(g_gcc, S3_RCGR + 0x10, 0xc476);
+    if (SetSeClk(384, 15625, 7372800))
+        return -1;
+    return 0;
+}
+
+// RCG of SE3 from GPLL0_OUT_AUX2 (300 MHz) with M/N (clk-rcg2.c __clk_rcg2_configure_mnd): 7.3728 MHz = 384/15625, 48 MHz = 4/25, 96 MHz = 8/25
+static int SetSeClk(ULONG m, ULONG n, ULONG hz)
+{
+    ULONG cfg, d = n;
+    int i;
+
+    if (d > 2 * (n - m))
+        d = 2 * (n - m);
+    Wr(g_gcc, S3_RCGR + 8, m);
+    Wr(g_gcc, S3_RCGR + 0xc, ~(n - m) & 0xffff);
+    Wr(g_gcc, S3_RCGR + 0x10, ~d & 0xffff);
     cfg = Rd(g_gcc, S3_RCGR + 4) & ~0x371fu;
     Wr(g_gcc, S3_RCGR + 4, cfg | (2u << 12) | (2u << 8) | 1u);
     Wr(g_gcc, S3_RCGR, Rd(g_gcc, S3_RCGR) | 1);
     for (i = 0; i < 100 && (Rd(g_gcc, S3_RCGR) & 1); i++)
         SleepMs(1);
-    Log("s3 rcgr after: cmd %08lx cfg %08lx m %08lx n %08lx d %08lx (%d ms) cbcr %08lx", (unsigned long)Rd(g_gcc, S3_RCGR),
-        (unsigned long)Rd(g_gcc, S3_RCGR + 4), (unsigned long)Rd(g_gcc, S3_RCGR + 8), (unsigned long)Rd(g_gcc, S3_RCGR + 0xc),
-        (unsigned long)Rd(g_gcc, S3_RCGR + 0x10), i, (unsigned long)Rd(g_gcc, S3_CBCR));
-    return (Rd(g_gcc, S3_RCGR) & 0x80000000) ? -1 : 0;     // ROOT_OFF
+    g_clk = hz;
+    Log("se3 clk %lu Hz (m %lu n %lu): cmd %08lx cfg %08lx (%d ms)", (unsigned long)hz, (unsigned long)m, (unsigned long)n,
+        (unsigned long)Rd(g_gcc, S3_RCGR), (unsigned long)Rd(g_gcc, S3_RCGR + 4), i);
+    return (Rd(g_gcc, S3_RCGR) & 0x80000001) ? -1 : 0;
 }
 
 static void SetBaud(ULONG baud)
 {
-    ULONG div = 7372800 / (baud * g_sampling);
+    ULONG div = g_clk / (baud * g_sampling);
 
     if (!div)
         div = 1;
     Wr(g_se, GENI_SER_M_CLK_CFG, (div << 4) | 1);
     Wr(g_se, GENI_SER_S_CLK_CFG, (div << 4) | 1);
-    Log("baud %lu: div %lu (actual %lu)", (unsigned long)baud, (unsigned long)div, (unsigned long)(7372800 / (div * g_sampling)));
+    Log("baud %lu: div %lu (actual %lu)", (unsigned long)baud, (unsigned long)div, (unsigned long)(g_clk / (div * g_sampling)));
 }
 
 static int UartInit(void)
@@ -456,7 +471,7 @@ static ULONG Le32(const UCHAR *p)
     return p[0] | (p[1] << 8) | (p[2] << 16) | ((ULONG)p[3] << 24);
 }
 
-// btqca qca_tlv_check_data for NVM, adapted: no in-band sleep (HCI tag 17 data[0] bit7 cleared), UART stays 115200 (data[2] = 0),
+// btqca qca_tlv_check_data for NVM, adapted: no in-band sleep (HCI tag 17 data[0] bit7 cleared), UART baud index data[2] = g_nvm_baud (0 = 115200),
 // deep sleep off (tag 27 bit0 cleared) — the host side has no IBS yet. BD address tag 2 is only noted (not logged).
 static void NvmPatch(UCHAR *d, ULONG size)
 {
@@ -480,9 +495,9 @@ static void NvmPatch(UCHAR *d, ULONG size)
         if (idx + 12 + tl > length)
             break;
         if (id == 17 && tl >= 3) {
-            Log("nvm tag 17 (hci): %02x %02x %02x -> in-band sleep off, baud 115200", n[12], n[13], n[14]);
+            Log("nvm tag 17 (hci): %02x %02x %02x -> in-band sleep off, baud index %u", n[12], n[13], n[14], g_nvm_baud);
             n[12] &= ~0x80;
-            n[14] = 0;
+            n[14] = g_nvm_baud;
         } else if (id == 27 && tl >= 1) {
             Log("nvm tag 27 (deep sleep): %02x -> off", n[12]);
             n[12] &= ~0x01;

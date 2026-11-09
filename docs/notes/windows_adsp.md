@@ -49,5 +49,5 @@ TrustZone возвращает `x0 = 1` (`QCOM_SCM_INTERRUPTED`), если пр�
 
 ## Что дальше
 - Снимать proxy-голоса после HANDOVER: сейчас они держатся до перезагрузки.
-- GLINK через SMEM (элементы 478, 479, 480) → QRTR → QMI. Это нужно и для звука с датчиками (ADSP), и для Wi-Fi (модем). См. [windows_wifi.md](windows_wifi.md).
+- GLINK через SMEM к ADSP (элементы 478, 479, 480) → QRTR → QMI. GLINK и QRTR к модему уже работают (Wi-Fi): см. [windows_wifi.md](windows_wifi.md). Для звука и датчиков нужен GLINK к ADSP.
 - Звука и датчиков пока нет: ADSP запускается, но канал с ним ещё не поднят.

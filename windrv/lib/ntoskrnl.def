@@ -8,6 +8,7 @@ ZwCreateFile
 ZwWriteFile
 ZwReadFile
 ZwClose
+ZwQueryInformationFile
 ZwQuerySystemInformation
 KeQuerySystemTimePrecise
 KeDelayExecutionThread
@@ -45,3 +46,5 @@ ObfReferenceObject
 MmGetPhysicalAddress
 MmAllocateContiguousMemorySpecifyCache
 MmFreeContiguousMemory
+ExCreateCallback
+ExRegisterCallback
