@@ -127,7 +127,7 @@ Windows сопоставляет его с действием кнопки пи�
 | Направление | Что сделано | Состояние |
 |---|---|---|
 | Частоты CPU (`windrv/cpufreq`, служба `j606fcpu`) | Прошивка `cpufreq-hw` включена; драйвер задаёт губернатор по загрузке с тепловым пределом и переключает 300 МГц ↔ 1804/2016 МГц. В Windows до этого домен 0 стоял на 1305,6 МГц, домен 1 — на 300 МГц | ✅ работает, автозапуск проверен |
-| Bluetooth (`windrv/rpm`, `windrv/btuart`, `windrv/btbus`) | `rpm`: GLINK к RPM, включение LDO BT. `btuart`: UART3 через GENI, загрузка прошивки WCN3990 по схеме btqca. `btbus`: шина BthX (`ROOT\J606FBT\0000` → дочернее устройство `J606F\WCN3990_UART`) под стеком Microsoft | ✅ стек видит устройства; сопряжение мыши не проверено, UART 115200 |
+| Bluetooth (`windrv/rpm`, `windrv/btuart`, `windrv/btbus`) | `rpm`: GLINK к RPM, включение LDO BT. `btuart`: UART3 через GENI, загрузка прошивки WCN3990 по схеме btqca. `btbus`: шина BthX (`ROOT\J606FBT\0000` → дочернее устройство `J606F\WCN3990_UART`) под стеком Microsoft | ✅ стек видит устройства; сопряжение мыши проверено (подтвердил владелец), UART 115200 |
 | Связь Windows ⇄ компьютер | `btagent.ps1` и `btwatch.ps1` через Bluetooth SPP, мост на одноплатном компьютере (`scripts/pi_btbridge.py`), клиент `scripts/btsh.py` | ✅ без перезагрузок; подробно — [DEV_WITHOUT_REBOOT.md](../DEV_WITHOUT_REBOOT.md) |
 | ADSP (LPASS Q6) | `btbus/adsp.inc`: RPM-голоса, PAS через SCM с продолжением прерванных вызовов, SMEM и SMP2P, пинок APCS | ✅ READY + HANDOVER; GLINK к ADSP — нет |
 | Wi-Fi (`windrv/btbus`, `windrv/j606fnet`) | модем (PAS id 4), rmtfs, pd-mapper, QMI WLFW, CE/HTC/WMI, минипорт Native 802.11 | ✅ WPA2-Personal, автоподключение, 802.11ac до 80 МГц; подробно — [windows_wifi.md](windows_wifi.md) |

@@ -106,7 +106,7 @@
 | Кнопки | ✅ | `hidbuttons`: питание; громкость — отчёты без звука |
 | Яркость из Windows по DSI | 🚧 | доказана `dsiprobe`; слайдер — драйвер `j606fdsp` в работе |
 | Частоты CPU | ✅ | `j606fcpu`: 300 МГц ↔ 1804/2016 МГц, губернатор с тепловым пределом |
-| Bluetooth | ✅ | стек Microsoft видит устройства; сопряжение мыши не проверено |
+| Bluetooth | ✅ | стек Microsoft видит устройства; сопряжение мыши проверено (подтвердил владелец) |
 | ADSP (LPASS Q6) | 🚧 | запускается из Windows (READY + HANDOVER); звука и датчиков пока нет — нужен GLINK к ADSP, см. [windows_adsp.md](windows_adsp.md) |
 | Wi-Fi | ✅ | настоящий адаптер Wi-Fi в Windows, WPA2-Personal, автоподключение, 802.11ac — см. [windows_wifi.md](windows_wifi.md) |
 | USB host, камеры, RTC, сон, GPU | ❌ | см. [windows_gpu.md](windows_gpu.md) и [windows_drivers_plan.md](windows_drivers_plan.md) |
